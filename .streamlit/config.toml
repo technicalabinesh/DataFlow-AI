@@ -11,3 +11,6 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 runOnSave = true
+maxUploadSize = 1024
+maxMessageSize = 1024
+
