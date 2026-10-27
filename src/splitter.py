@@ -168,15 +168,21 @@ def split_image_dataset(
         stratify=stratify_target,
     )
 
-    val_share = val_ratio / (val_ratio + test_ratio) if (val_ratio + test_ratio) > 0 else 0.5
-    stratify_vt = val_test_df["label"] if (stratify_target is not None and val_test_df["label"].value_counts().min() >= 2) else None
-
-    val_df, test_df = train_test_split(
-        val_test_df,
-        test_size=(1.0 - val_share),
-        random_state=random_state,
-        stratify=stratify_vt,
-    )
+    if len(val_test_df) == 0:
+        val_df = pd.DataFrame(columns=df_img.columns)
+        test_df = pd.DataFrame(columns=df_img.columns)
+    elif len(val_test_df) == 1:
+        val_df = val_test_df
+        test_df = val_test_df.copy()
+    else:
+        val_share = val_ratio / (val_ratio + test_ratio) if (val_ratio + test_ratio) > 0 else 0.5
+        stratify_vt = val_test_df["label"] if (stratify_target is not None and val_test_df["label"].value_counts().min() >= 2) else None
+        val_df, test_df = train_test_split(
+            val_test_df,
+            test_size=(1.0 - val_share),
+            random_state=random_state,
+            stratify=stratify_vt,
+        )
 
     report["train_count"] = len(train_df)
     report["val_count"] = len(val_df)

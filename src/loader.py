@@ -224,6 +224,7 @@ def compute_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
 def extract_zip_to_raw(zip_bytes: bytes, zip_filename: str) -> Tuple[str, List[str]]:
     """
     Extracts uploaded zip archive into data/raw/extracted_<timestamp> safely.
+    Filters out __MACOSX resource fork files and metadata files.
     Returns (extracted_folder_path, list_of_corrupt_files).
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -237,6 +238,9 @@ def extract_zip_to_raw(zip_bytes: bytes, zip_filename: str) -> Tuple[str, List[s
             # Security against Zip Slip vulnerability
             filename = member.filename
             if filename.startswith("/") or ".." in filename:
+                continue
+            # Filter macOS metadata and hidden files
+            if "__MACOSX" in filename or os.path.basename(filename).startswith("._") or os.path.basename(filename) in [".DS_Store", "Thumbs.db"]:
                 continue
             try:
                 z.extract(member, target_dir)
@@ -276,10 +280,26 @@ def scan_dataset_directory(folder_path: str) -> Dict[str, Any]:
 
     results["exists"] = True
 
+    # If folder has only a single subdirectory wrapper (e.g. zip had one top folder), resolve inner root
+    try:
+        entries = [e for e in os.listdir(folder_path) if not e.startswith(".") and e != "__MACOSX"]
+        if len(entries) == 1:
+            candidate = os.path.join(folder_path, entries[0])
+            if os.path.isdir(candidate):
+                folder_path = candidate
+                results["path"] = candidate
+    except Exception:
+        pass
+
     # Recursive scan
     all_files = []
     for root, _, files in os.walk(folder_path):
+        # Ignore macOS metadata folders
+        if "__MACOSX" in root:
+            continue
         for f in files:
+            if f.startswith("._") or f in [".DS_Store", "Thumbs.db"]:
+                continue
             all_files.append(os.path.join(root, f))
 
     if not all_files:
@@ -304,7 +324,7 @@ def scan_dataset_directory(folder_path: str) -> Dict[str, Any]:
     # DETECT STRUCTURE:
     
     # Check for pre-split structure (train/val/test or train/test)
-    subdirs = [d.lower() for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d))]
+    subdirs = [d.lower() for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d)) and d != "__MACOSX"]
     has_train = "train" in subdirs
     has_test = "test" in subdirs or "val" in subdirs or "validation" in subdirs
 
@@ -316,7 +336,11 @@ def scan_dataset_directory(folder_path: str) -> Dict[str, Any]:
             if os.path.isdir(split_dir):
                 s_images = []
                 for r, _, fs in os.walk(split_dir):
+                    if "__MACOSX" in r:
+                        continue
                     for f in fs:
+                        if f.startswith("._") or f in [".DS_Store", "Thumbs.db"]:
+                            continue
                         if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS:
                             s_images.append(os.path.join(r, f))
                 results["split_folders"][s] = s_images
@@ -353,6 +377,18 @@ def scan_dataset_directory(folder_path: str) -> Dict[str, Any]:
             if os.path.abspath(os.path.dirname(img_path)) == os.path.abspath(folder_path):
                 parent = "unlabeled"
             class_counts[parent] = class_counts.get(parent, 0) + 1
+
+        # If only 1 class was found (or unlabeled), attempt class detection from filename prefix (e.g. cat_01.jpg, dog_01.jpg)
+        if len(class_counts) <= 1 or "unlabeled" in class_counts:
+            prefix_counts = {}
+            import re
+            for img_path in results["images"]:
+                fname = os.path.splitext(os.path.basename(img_path))[0]
+                m = re.match(r"^([a-zA-Z]+)", fname)
+                pref = m.group(1).lower() if m else "general"
+                prefix_counts[pref] = prefix_counts.get(pref, 0) + 1
+            if len(prefix_counts) >= 2:
+                class_counts = prefix_counts
 
         results["classes"] = class_counts
         results["summary"] = f"Detected Image Classification folder with {len(class_counts)} classes ({', '.join(list(class_counts.keys())[:5])}{'...' if len(class_counts) > 5 else ''}) and {len(results['images'])} images."

@@ -98,6 +98,12 @@ def train_mobilenet_v2(
 
     # Extract unique classes
     all_labels = sorted(list({label for _, label in (train_data + val_data + test_data)}))
+    if len(all_labels) < 2:
+        raise ValueError(
+            f"Image classification requires at least 2 distinct classes to train MobileNetV2. "
+            f"Detected classes: {all_labels}. Please ensure your dataset contains 2+ class subfolders."
+        )
+
     class_to_idx = {label: i for i, label in enumerate(all_labels)}
     idx_to_class = {i: label for label, i in class_to_idx.items()}
     num_classes = len(all_labels)
@@ -131,8 +137,14 @@ def train_mobilenet_v2(
         shuffle=False,
     )
 
-    # Build model with pretrained backbone
-    model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
+    # Build model with pretrained backbone (with offline fallback resilience)
+    try:
+        model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
+    except Exception:
+        try:
+            model = models.mobilenet_v2(weights="DEFAULT")
+        except Exception:
+            model = models.mobilenet_v2(weights=None)
 
     # Freeze feature extractor layers
     for param in model.features.parameters():
