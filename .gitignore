@@ -1,0 +1,35 @@
+# Python environment and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Streamlit secrets and runtime cache
+.streamlit/secrets.toml
+
+# Environment variables (CRITICAL: Never commit API keys!)
+.env
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# User data files and generated artifacts (preserve directory structure via .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+data/cleaned/*
+!data/cleaned/.gitkeep
+models/*
+!models/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# Operating system files
+.DS_Store
+Thumbs.db
