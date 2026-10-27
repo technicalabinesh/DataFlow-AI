@@ -186,11 +186,57 @@ NEOBRUTALISM_CSS = """
         color: #111827 !important;
         font-weight: 700 !important;
     }
+    /* Neo Buttons - Global Shape Enforcement Across All Button Types */
+    .stButton > button,
+    .stDownloadButton > button,
+    .stFormSubmitButton > button,
+    div[data-testid="stFileUploader"] button,
+    button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-primary"] {
+        border: 2px solid #000000 !important;
+        border-radius: 9999px !important;
+        font-weight: 800 !important;
+        font-size: 0.82rem !important;
+        box-shadow: 3px 3px 0px #000000 !important;
+        transition: all 0.12s ease !important;
+        color: #000000 !important;
+        background-color: #ffffff !important;
+        padding: 6px 14px !important;
+        min-height: 42px !important;
+        height: 42px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-decoration: none !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        box-sizing: border-box !important;
+    }
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stFormSubmitButton > button:hover,
+    div[data-testid="stFileUploader"] button:hover,
+    button[data-testid="baseButton-secondary"]:hover,
+    button[data-testid="baseButton-primary"]:hover {
+        transform: translate(-1px, -1px) !important;
+        box-shadow: 4px 4px 0px #000000 !important;
+        border-color: #000000 !important;
+        color: #000000 !important;
+    }
+    .stButton > button:active,
+    .stDownloadButton > button:active,
+    .stFormSubmitButton > button:active,
+    div[data-testid="stFileUploader"] button:active,
+    button[data-testid="baseButton-secondary"]:active,
+    button[data-testid="baseButton-primary"]:active {
+        transform: translate(2px, 2px) !important;
+        box-shadow: 1px 1px 0px #000000 !important;
+    }
+
     div[data-testid="stFileUploader"] button {
         background: #8b5cf6 !important;
         color: #ffffff !important;
-        border: 2px solid #000000 !important;
-        box-shadow: 2px 2px 0px #000000 !important;
     }
     div[data-testid="stFileUploader"] button p {
         color: #ffffff !important;
@@ -201,42 +247,6 @@ NEOBRUTALISM_CSS = """
     div[data-testid="stCheckbox"] label, div[data-testid="stCheckbox"] p {
         color: #000000 !important;
         font-weight: 700 !important;
-    }
-
-    /* Top Floating Capsule Bar */
-    .top-capsule-bar {
-        background: #ffffff;
-        border: 2.5px solid #000000;
-        border-radius: 9999px;
-        box-shadow: 4px 4px 0px #000000;
-        padding: 8px 18px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 25px;
-    }
-
-    /* Neo Buttons */
-    .stButton > button {
-        border: 2px solid #000000 !important;
-        border-radius: 9999px !important;
-        font-weight: 800 !important;
-        font-size: 0.85rem !important;
-        box-shadow: 3px 3px 0px #000000 !important;
-        transition: all 0.12s ease !important;
-        color: #000000 !important;
-        background-color: #ffffff !important;
-        padding: 6px 18px !important;
-    }
-    .stButton > button:hover {
-        transform: translate(-1px, -1px) !important;
-        box-shadow: 4px 4px 0px #000000 !important;
-        border-color: #000000 !important;
-        color: #000000 !important;
-    }
-    .stButton > button:active {
-        transform: translate(2px, 2px) !important;
-        box-shadow: 1px 1px 0px #000000 !important;
     }
 
     /* Neo Cards with Hard Offset Shadow */
@@ -349,9 +359,16 @@ NEOBRUTALISM_CSS = """
         border: 2px solid #000000;
         border-radius: 16px;
         box-shadow: 4px 4px 0px #000000;
-        padding: 16px;
-        height: 100%;
-        cursor: pointer;
+        padding: 12px 14px;
+        height: 104px !important;
+        min-height: 104px !important;
+        max-height: 104px !important;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        overflow: hidden;
         transition: transform 0.12s ease;
     }
     .milestone-card:hover {
@@ -442,11 +459,11 @@ init_session()
 # TOP FLOATING CAPSULE NAVIGATION (NO OLD SIDEBAR BUTTONS!)
 # -----------------------------------------------------------------------------
 col_logo, col_nav1, col_nav2, col_nav3, col_nav4, col_nav5, col_nav6, col_badge = st.columns(
-    [2.2, 1.3, 1.3, 1.4, 1.3, 1.5, 1.3, 2.0]
+    [1.8, 1.1, 1.1, 1.3, 1.2, 1.3, 1.1, 1.8]
 )
 
 with col_logo:
-    st.markdown(
+    st.html(
         """
         <div style="display: flex; align-items: center; gap: 8px; padding-top: 4px;">
             <div style="background: #8b5cf6; width: 34px; height: 34px; border: 2px solid #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #fff; font-weight: 900; box-shadow: 2px 2px 0px #000;">
@@ -457,8 +474,7 @@ with col_logo:
                 <span class="neo-badge badge-purple" style="font-size: 0.65rem; padding: 2px 8px; margin-left: 4px;">Power BI</span>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 with col_nav1:
@@ -486,7 +502,7 @@ with col_nav4:
         st.rerun()
 
 with col_nav5:
-    btn_label = "💬 Voice & Text AI" if st.session_state.active_module != "chat" else "👉 Voice & Text AI"
+    btn_label = "💬 Voice AI" if st.session_state.active_module != "chat" else "👉 Voice AI"
     if st.button(btn_label, use_container_width=True):
         st.session_state.active_module = "chat"
         st.rerun()
@@ -500,17 +516,16 @@ with col_nav6:
 with col_badge:
     engine_status = "⚡ GROQ ENGINE ACTIVE" if st.session_state.groq_api_key else "⚡ LOCAL AI ACTIVE"
     badge_bg = "badge-lime" if st.session_state.groq_api_key else "badge-yellow"
-    st.markdown(
+    st.html(
         f"""
         <div style="text-align: right; padding-top: 5px;">
             <span class="neo-badge {badge_bg}">{engine_status}</span>
             <span class="neo-badge badge-dark">ADMIN: Viva</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-st.markdown("<hr style='border: 1.5px solid #000; margin-top: 8px; margin-bottom: 24px;'>", unsafe_allow_html=True)
+st.html("<hr style='border: 1.5px solid #000; margin-top: 8px; margin-bottom: 24px;'>")
 
 
 # -----------------------------------------------------------------------------
@@ -520,17 +535,16 @@ st.markdown("<hr style='border: 1.5px solid #000; margin-top: 8px; margin-bottom
 hero_left, hero_right = st.columns([1.3, 1.4])
 
 with hero_left:
-    st.markdown(
+    st.html(
         """
         <div style="font-size: 2.5rem; font-weight: 900; color: #000000; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 10px;">
             Seamless <span style="text-decoration: underline; text-decoration-color: #8b5cf6;">Data</span> Journey ⤳
         </div>
-        <div style="font-size: 1.02rem; color: #475569; font-weight: 600; line-height: 1.5; margin-bottom: 18px; max-width: 580px;">
+        <div style="font-size: 1.22rem; color: #1e293b; font-weight: 700; line-height: 1.55; margin-bottom: 22px; max-width: 620px;">
             Universal AI Data Analyst: Autonomous Cleaning, Power BI Dashboard, AutoML Leaderboards, 
             and Multilingual Voice & Text Chatbot in English & Tamil.
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     btn_c1, btn_c2 = st.columns([1.5, 1.5])
@@ -549,21 +563,20 @@ with hero_left:
             st.session_state.active_module = "ingest"
             st.rerun()
 
-    st.markdown(
+    st.html(
         """
-        <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-weight: 800; font-size: 0.78rem; text-transform: uppercase;">Universal Formats:</span>
-            <span class="neo-badge badge-purple">CSV / TSV</span>
-            <span class="neo-badge badge-lime">Excel (.xlsx/.xls)</span>
-            <span class="neo-badge badge-cyan">Parquet & JSON</span>
-            <span class="neo-badge badge-yellow">Vision Folders</span>
+        <div style="margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;">
+            <span style="font-weight: 900; font-size: 0.82rem; text-transform: uppercase; color: #000000; letter-spacing: 0.05em; white-space: nowrap;">Universal Formats:</span>
+            <span class="neo-badge badge-purple" style="font-size: 0.76rem; padding: 5px 14px;">CSV / TSV</span>
+            <span class="neo-badge badge-lime" style="font-size: 0.76rem; padding: 5px 14px;">Excel (.xlsx/.xls)</span>
+            <span class="neo-badge badge-cyan" style="font-size: 0.76rem; padding: 5px 14px;">Parquet & JSON</span>
+            <span class="neo-badge badge-yellow" style="font-size: 0.76rem; padding: 5px 14px;">Vision Folders</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 with hero_right:
-    st.markdown(
+    st.html(
         """
         <div style="background: #ffffff; border: 2.5px solid #000000; border-radius: 20px; box-shadow: 4px 4px 0px #000000; padding: 20px 22px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
@@ -642,8 +655,7 @@ with hero_right:
                 </span>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 st.markdown("<hr style='border: 1.5px solid #000; margin-top: 25px; margin-bottom: 25px;'>", unsafe_allow_html=True)
@@ -656,108 +668,102 @@ st.markdown("##### 📌 Workflow Milestones & Unified Direct Actions")
 m_c1, m_c2, m_c3, m_c4, m_c5, m_c6 = st.columns(6)
 
 with m_c1:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-purple" style="font-size: 0.62rem;">Step 1</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">INGEST</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 1</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">INGEST</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.92rem; margin-bottom: 4px;">📁 Load Dataset</div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">CSV, Excel, Vision & Split</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📁 Load Dataset</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">CSV, Excel, Vision & Split</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     if st.button("Open Ingest ↗", key="m_btn_1", use_container_width=True):
         st.session_state.active_module = "ingest"
         st.rerun()
 
 with m_c2:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-yellow" style="font-size: 0.62rem;">Step 2</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">CLEAN</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 2</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">CLEAN</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.92rem; margin-bottom: 4px;">🧹 Auto Cleaner</div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Types, Impute, Outliers</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🧹 Auto Cleaner</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Types, Impute, Outliers</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     if st.button("Open Cleaner ↗", key="m_btn_2", use_container_width=True):
         st.session_state.active_module = "clean"
         st.rerun()
 
 with m_c3:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-cyan" style="font-size: 0.62rem;">Step 3</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">POWER BI</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-cyan" style="font-size: 0.62rem; padding: 2px 8px;">Step 3</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">POWER BI</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.92rem; margin-bottom: 4px;">📊 Power BI</div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Slicers, Donut, Matrix</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Power BI</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Slicers, Donut, Matrix</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     if st.button("Open Power BI ↗", key="m_btn_3", use_container_width=True):
         st.session_state.active_module = "eda"
         st.rerun()
 
 with m_c4:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-lime" style="font-size: 0.62rem;">Step 4</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">AUTOML</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-lime" style="font-size: 0.62rem; padding: 2px 8px;">Step 4</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AUTOML</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.92rem; margin-bottom: 4px;">🤖 AutoML Studio</div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">3+ Models & Predict</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🤖 AutoML Studio</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">3+ Models & Predict</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     if st.button("Open AutoML ↗", key="m_btn_4", use_container_width=True):
         st.session_state.active_module = "automl"
         st.rerun()
 
 with m_c5:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-purple" style="font-size: 0.62rem;">Step 5</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">AI INTEL</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 5</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AI INTEL</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.86rem; margin-bottom: 4px;">💬 Instant Voice & Text Dataset Intelligence</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Mic STT & Multilingual Text AI</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">💬 Voice & Text AI</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Instant Mic STT & Text AI</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
-    if st.button("Open Intelligence ↗", key="m_btn_5", use_container_width=True):
+    if st.button("Open AI ↗", key="m_btn_5", use_container_width=True):
         st.session_state.active_module = "chat"
         st.rerun()
 
 with m_c6:
-    st.markdown(
+    st.html(
         """
         <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="neo-badge badge-yellow" style="font-size: 0.62rem;">Step 6</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem;">REPORTS</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 6</span>
+                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">REPORTS</span>
             </div>
-            <div style="font-weight: 900; font-size: 0.86rem; margin-bottom: 4px;">📑 Executive Reports</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Download All Q&A, PDF & Word</div>
+            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📑 Executive Reports</div>
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Download Q&A, PDF & Word</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     if st.button("Open Reports ↗", key="m_btn_6", use_container_width=True):
         st.session_state.active_module = "report"
