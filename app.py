@@ -1801,9 +1801,15 @@ elif st.session_state.active_module == "automl":
 
                 c_curve, c_mat = st.columns(2)
                 with c_curve:
-                    st.plotly_chart(create_training_curves_chart(res["history"]), use_container_width=True)
+                    try:
+                        st.plotly_chart(create_training_curves_chart(res["history"]), use_container_width=True)
+                    except Exception as e:
+                        st.caption(f"Convergence Curves: {e}")
                 with c_mat:
-                    st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), use_container_width=True)
+                    try:
+                        st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), use_container_width=True)
+                    except Exception as e:
+                        st.caption(f"Confusion Matrix: {e}")
 
                 # Live Single Image Inference
                 st.markdown("---")

@@ -380,8 +380,8 @@ def create_training_curves_chart(history: Dict[str, List[float]]) -> go.Figure:
     fig.update_layout(
         title="Live Training & Validation Convergence Curves",
         xaxis=dict(title="Epoch"),
-        yaxis=dict(title="Cross-Entropy Loss", titlefont=dict(color="#f43f5e")),
-        yaxis2=dict(title="Accuracy (%)", titlefont=dict(color="#38bdf8"), overlaying="y", side="right"),
+        yaxis=dict(title=dict(text="Cross-Entropy Loss", font=dict(color="#f43f5e"))),
+        yaxis2=dict(title=dict(text="Accuracy (%)", font=dict(color="#38bdf8")), overlaying="y", side="right"),
         template="plotly_dark",
         paper_bgcolor="rgba(15, 23, 42, 0.4)",
         plot_bgcolor="rgba(15, 23, 42, 0.4)",
