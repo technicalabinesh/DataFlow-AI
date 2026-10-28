@@ -195,12 +195,13 @@ def generate_correlation_heatmap(df: pd.DataFrame) -> Tuple[Optional[go.Figure],
     z = corr.values.tolist()
     z_text = [[str(val) for val in row] for row in z]
 
-    fig = ff.create_annotated_heatmap(
-        z,
+    fig = px.imshow(
+        corr,
+        text_auto=True,
         x=cols,
         y=cols,
-        annotation_text=z_text,
-        colorscale="Blues",
+        color_continuous_scale="Blues",
+        labels=dict(color="Correlation"),
     )
     fig.update_layout(
         title=dict(text="<b>Correlation Matrix Heatmap</b>", font=dict(size=15, color="#000000")),

@@ -41,6 +41,7 @@ from sklearn.metrics import (
     r2_score,
 )
 import plotly.graph_objects as go
+import plotly.express as px
 import plotly.figure_factory as ff
 
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -211,12 +212,13 @@ def train_tabular_models(
         labels = sorted(list(set(y_test).union(set(best_preds))))
         labels_str = [str(l) for l in labels]
         cm = confusion_matrix(y_test, best_preds, labels=labels).tolist()
-        cm_fig = ff.create_annotated_heatmap(
+        cm_fig = px.imshow(
             cm,
+            text_auto=True,
             x=labels_str,
             y=labels_str,
-            annotation_text=[[str(v) for v in r] for r in cm],
-            colorscale="Viridis",
+            color_continuous_scale="Viridis",
+            labels=dict(x="Predicted Class", y="True Class", color="Count"),
         )
         cm_fig.update_layout(
             title=f"Test Confusion Matrix — Best Model ({best_model_name})",

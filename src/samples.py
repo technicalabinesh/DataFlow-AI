@@ -127,5 +127,6 @@ def ensure_sample_datasets() -> dict:
 
     paths["image_folder"] = img_root
     paths["image_zip"] = zip_path
+    paths["animal_images"] = img_root
 
     return paths

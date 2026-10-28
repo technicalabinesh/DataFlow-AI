@@ -58,8 +58,34 @@ from src.automl import (
 from src.image_trainer import (
     train_mobilenet_v2,
     predict_single_image,
+    predict_any_image_instant,
     create_training_curves_chart,
     create_confusion_matrix_chart,
+)
+from src.nlp_engine import (
+    analyze_text_sentiment,
+    extract_keywords_and_ngrams,
+    summarize_text_extractive,
+    train_text_classifier,
+    analyze_dataset_text_column,
+)
+from src.recommender import (
+    build_content_recommender,
+    get_recommendations,
+)
+from src.forecasting import (
+    detect_time_series_columns,
+    prepare_time_series,
+    train_time_series_forecast,
+    create_forecast_figure,
+)
+from src.anomaly_engine import (
+    detect_anomalies,
+    export_clean_dataset_without_anomalies,
+)
+from src.genai_engine import (
+    generate_synthetic_tabular_data,
+    generate_executive_narrative,
 )
 from src.chatbot import (
     generate_groq_pandas_code,
@@ -450,6 +476,12 @@ def init_session():
         "scanned_dir": None,
         "scan_res": None,
         "uploaded_zip_name": None,
+        "nlp_results": None,
+        "recommender_results": None,
+        "forecasting_results": None,
+        "anomaly_results": None,
+        "genai_results": None,
+        "instant_img_result": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -827,74 +859,126 @@ if st.session_state.active_module == "ingest":
     def resolve_image_items_from_scan(s_res, target_dir):
         if not s_res or not s_res.get("images"):
             return [], {}
-        
-        if s_res.get("mode") == "images_per_class" and s_res.get("classes"):
-            itms = [(p, os.path.basename(os.path.dirname(p))) for p in s_res["images"]]
-            cls_dict = s_res["classes"]
-        elif s_res.get("mode") == "images_presplit" and s_res.get("split_folders"):
+
+        # Priority 1: Use pre-synchronized items from scanner engine
+        if s_res.get("image_items") and len(s_res["image_items"]) == len(s_res["images"]):
+            items = s_res["image_items"]
+            cls_dict = s_res.get("classes", {})
+            if not cls_dict or len(cls_dict) <= 1:
+                cls_dict = {}
+                for _, l in items:
+                    cls_dict[l] = cls_dict.get(l, 0) + 1
+            return items, cls_dict
+
+        raw_images = s_res["images"]
+        generic_names = {"images", "image", "img", "imgs", "photos", "pictures", "data", "dataset", "raw", "extracted", "archive", "content", "unlabeled"}
+        split_names = {"train", "val", "validation", "test", "testing"}
+
+        parent_map = {p: os.path.basename(os.path.dirname(p)).strip() for p in raw_images}
+        unique_parents = set(parent_map.values())
+        non_generic_parents = unique_parents - generic_names - split_names
+
+        # 1. Pre-split structure (e.g. train/cats/1.jpg)
+        if s_res.get("mode") == "images_presplit" or any(s.lower() in split_names for s in unique_parents):
             itms = []
-            for s_name, s_imgs in s_res["split_folders"].items():
-                for p in s_imgs:
-                    lbl = os.path.basename(os.path.dirname(p))
-                    if lbl.lower() in ["train", "val", "test", "validation"]:
-                        lbl = s_name
-                    itms.append((p, lbl))
-            if not itms:
-                itms = [(p, os.path.basename(os.path.dirname(p))) for p in s_res["images"]]
+            for p in raw_images:
+                p_name = parent_map[p]
+                if p_name.lower() in split_names:
+                    fname = os.path.splitext(os.path.basename(p))[0]
+                    m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
+                    lbl = m.group(1).lower() if (m and len(m.group(1)) >= 2) else p_name.lower()
+                else:
+                    lbl = p_name
+                itms.append((p, lbl))
             cls_dict = {}
             for _, l in itms:
                 cls_dict[l] = cls_dict.get(l, 0) + 1
-        else:
-            itms = []
+            return itms, cls_dict
+
+        # 2. Distinct non-generic class folders (e.g. .../images/cats/1.jpg, .../images/dogs/2.jpg)
+        if len(non_generic_parents) >= 2:
+            itms = [(p, parent_map[p]) for p in raw_images]
             cls_dict = {}
-            import re
-            for p in s_res["images"]:
-                lbl = os.path.basename(os.path.dirname(p))
-                if lbl == os.path.basename(target_dir) or lbl in ["unlabeled", ""]:
-                    fname = os.path.splitext(os.path.basename(p))[0]
-                    m = re.match(r"^([a-zA-Z]+)", fname)
-                    lbl = m.group(1).lower() if m else "general"
-                itms.append((p, lbl))
-                cls_dict[lbl] = cls_dict.get(lbl, 0) + 1
-        
+            for _, l in itms:
+                cls_dict[l] = cls_dict.get(l, 0) + 1
+            return itms, cls_dict
+
+        # 3. Filename prefix (e.g. .../images/cat.1.jpg, .../images/dog.1.jpg, .../cat_01.jpg)
+        prefix_map = {}
+        for p in raw_images:
+            fname = os.path.splitext(os.path.basename(p))[0]
+            m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
+            if m and len(m.group(1)) >= 2:
+                prefix_map[p] = m.group(1).lower()
+
+        unique_prefixes = set(prefix_map.values())
+        if len(unique_prefixes) >= 2 and len(prefix_map) >= len(raw_images) * 0.6:
+            itms = [(p, prefix_map.get(p, "other")) for p in raw_images]
+            cls_dict = {}
+            for _, l in itms:
+                cls_dict[l] = cls_dict.get(l, 0) + 1
+            return itms, cls_dict
+
+        # 4. Grandparent directory (e.g. .../cats/images/1.jpg)
+        gp_map = {p: os.path.basename(os.path.dirname(os.path.dirname(p))).strip() for p in raw_images}
+        non_generic_gps = set(gp_map.values()) - generic_names - split_names
+        if len(non_generic_gps) >= 2:
+            itms = [(p, gp_map[p]) for p in raw_images]
+            cls_dict = {}
+            for _, l in itms:
+                cls_dict[l] = cls_dict.get(l, 0) + 1
+            return itms, cls_dict
+
+        # Fallback
+        itms = [(p, parent_map[p] if parent_map[p] not in generic_names else "general") for p in raw_images]
+        cls_dict = {}
+        for _, l in itms:
+            cls_dict[l] = cls_dict.get(l, 0) + 1
         return itms, cls_dict
 
     with ingest_tab2:
-        folder_mode = st.radio("Provide Input Via:", ["📦 Upload ZIP Archive", "🗂️ Local Folder Path"], horizontal=True)
+        folder_mode = st.radio(
+            "Provide Input Via:",
+            ["📦 Upload ZIP Archive", "⚡ Local Path (Instant - Best for 300MB+ ZIPs or Folders)"],
+            horizontal=True
+        )
 
         if folder_mode == "📦 Upload ZIP Archive":
-            uploaded_zip = st.file_uploader("Upload ZIP dataset archive (e.g. test.zip with cats & dogs):", type=["zip"])
+            uploaded_zip = st.file_uploader(
+                "Upload ZIP dataset archive (e.g. test.zip with cats & dogs, or flat images):",
+                type=["zip"]
+            )
             if uploaded_zip is not None:
                 # Auto-extract and scan when new zip is uploaded
                 if st.session_state.get("uploaded_zip_name") != uploaded_zip.name:
-                    with st.spinner("Extracting, cleaning macOS metadata & scanning ZIP archive..."):
-                        zip_bytes = uploaded_zip.getvalue()
-                        extracted_path, _ = extract_zip_to_raw(zip_bytes, uploaded_zip.name)
-                        st.session_state.scanned_dir = extracted_path
-                        s_res = scan_dataset_directory(extracted_path)
-                        st.session_state.scan_res = s_res
-                        st.session_state.uploaded_zip_name = uploaded_zip.name
+                    p_prog = st.progress(0.2, text=f"⚡ Multi-core unzipping '{uploaded_zip.name}'...")
+                    extracted_path, _ = extract_zip_to_raw(uploaded_zip, uploaded_zip.name)
+                    p_prog.progress(0.7, text="🔍 Scanning dataset structure & classes...")
+                    st.session_state.scanned_dir = extracted_path
+                    s_res = scan_dataset_directory(extracted_path)
+                    st.session_state.scan_res = s_res
+                    st.session_state.uploaded_zip_name = uploaded_zip.name
 
-                        # AUTO-CONNECT: Automatically register and split image dataset immediately!
-                        if s_res.get("images") and len(s_res["images"]) > 0:
-                            itms, cls_dict = resolve_image_items_from_scan(s_res, extracted_path)
-                            st.session_state.raw_df = None
-                            st.session_state.cleaned_df = None
-                            st.session_state.image_data_items = itms
-                            st.session_state.image_classes = cls_dict
-                            st.session_state.raw_filename = uploaded_zip.name
-                            st.session_state.dataset_type = "image"
-                            train_l, val_l, test_l, rep = split_image_dataset(itms)
-                            st.session_state.image_splits = (train_l, val_l, test_l, rep)
-                            st.session_state.image_model_results = None
-                            st.rerun()
+                    # AUTO-CONNECT: Automatically register and split image dataset immediately!
+                    if s_res.get("images") and len(s_res["images"]) > 0:
+                        itms, cls_dict = resolve_image_items_from_scan(s_res, extracted_path)
+                        st.session_state.raw_df = None
+                        st.session_state.cleaned_df = None
+                        st.session_state.image_data_items = itms
+                        st.session_state.image_classes = cls_dict
+                        st.session_state.raw_filename = uploaded_zip.name
+                        st.session_state.dataset_type = "image"
+                        train_l, val_l, test_l, rep = split_image_dataset(itms)
+                        st.session_state.image_splits = (train_l, val_l, test_l, rep)
+                        st.session_state.image_model_results = None
+                        p_prog.progress(1.0, text="✅ Ingestion & auto-split completed!")
+                        st.rerun()
 
                 c_z1, c_z2 = st.columns([1.5, 2.5])
                 with c_z1:
                     if st.button("📦 Re-Extract & Re-Scan ZIP", use_container_width=True):
-                        with st.spinner("Re-extracting ZIP archive..."):
-                            zip_bytes = uploaded_zip.getvalue()
-                            extracted_path, _ = extract_zip_to_raw(zip_bytes, uploaded_zip.name)
+                        with st.spinner("⚡ Multi-core re-extracting ZIP archive..."):
+                            extracted_path, _ = extract_zip_to_raw(uploaded_zip, uploaded_zip.name)
                             st.session_state.scanned_dir = extracted_path
                             s_res = scan_dataset_directory(extracted_path)
                             st.session_state.scan_res = s_res
@@ -913,26 +997,56 @@ if st.session_state.active_module == "ingest":
                             st.rerun()
 
         else:
-            folder_input_path = st.text_input("Enter absolute or relative folder path:", value="")
-            if st.button("🔍 Scan Directory", use_container_width=False):
-                if not os.path.exists(folder_input_path):
-                    st.error(f"❌ Directory not found: `{folder_input_path}`")
+            st.caption("💡 **Tip for large files (300MB+)**: Browser upload takes time transferring large archives. Enter the local file path to extract and load directly in **~2-3 seconds** with 0s upload wait!")
+            folder_input_path = st.text_input(
+                "Enter absolute path to local ZIP file or folder:",
+                value="",
+                placeholder="e.g. C:\\Users\\Hari\\Downloads\\cats_and_dogs.zip or data/raw/images"
+            )
+            if st.button("🔍 Ingest & Scan Path", use_container_width=False):
+                clean_path = folder_input_path.strip().strip('"').strip("'")
+                if not clean_path:
+                    st.warning("⚠️ Please provide a valid local file or folder path.")
+                elif not os.path.exists(clean_path):
+                    st.error(f"❌ File or folder not found: `{clean_path}`")
                 else:
-                    st.session_state.scanned_dir = folder_input_path
-                    s_res = scan_dataset_directory(folder_input_path)
-                    st.session_state.scan_res = s_res
-                    st.session_state.uploaded_zip_name = None
-                    if s_res.get("images") and len(s_res["images"]) > 0:
-                        itms, cls_dict = resolve_image_items_from_scan(s_res, folder_input_path)
-                        st.session_state.raw_df = None
-                        st.session_state.cleaned_df = None
-                        st.session_state.image_data_items = itms
-                        st.session_state.image_classes = cls_dict
-                        st.session_state.raw_filename = os.path.basename(folder_input_path)
-                        st.session_state.dataset_type = "image"
-                        train_l, val_l, test_l, rep = split_image_dataset(itms)
-                        st.session_state.image_splits = (train_l, val_l, test_l, rep)
-                        st.session_state.image_model_results = None
+                    # Check if it is a local ZIP file
+                    if os.path.isfile(clean_path) and (clean_path.lower().endswith(".zip") or zipfile.is_zipfile(clean_path)):
+                        with st.spinner(f"⚡ Extracting local ZIP directly with multi-core unzipper: '{os.path.basename(clean_path)}'..."):
+                            extracted_path, _ = extract_zip_to_raw(clean_path, os.path.basename(clean_path))
+                            st.session_state.scanned_dir = extracted_path
+                            s_res = scan_dataset_directory(extracted_path)
+                            st.session_state.scan_res = s_res
+                            st.session_state.uploaded_zip_name = os.path.basename(clean_path)
+                            if s_res.get("images") and len(s_res["images"]) > 0:
+                                itms, cls_dict = resolve_image_items_from_scan(s_res, extracted_path)
+                                st.session_state.raw_df = None
+                                st.session_state.cleaned_df = None
+                                st.session_state.image_data_items = itms
+                                st.session_state.image_classes = cls_dict
+                                st.session_state.raw_filename = os.path.basename(clean_path)
+                                st.session_state.dataset_type = "image"
+                                train_l, val_l, test_l, rep = split_image_dataset(itms)
+                                st.session_state.image_splits = (train_l, val_l, test_l, rep)
+                                st.session_state.image_model_results = None
+                            st.rerun()
+                    else:
+                        # Standard local folder
+                        st.session_state.scanned_dir = clean_path
+                        s_res = scan_dataset_directory(clean_path)
+                        st.session_state.scan_res = s_res
+                        st.session_state.uploaded_zip_name = None
+                        if s_res.get("images") and len(s_res["images"]) > 0:
+                            itms, cls_dict = resolve_image_items_from_scan(s_res, clean_path)
+                            st.session_state.raw_df = None
+                            st.session_state.cleaned_df = None
+                            st.session_state.image_data_items = itms
+                            st.session_state.image_classes = cls_dict
+                            st.session_state.raw_filename = os.path.basename(clean_path)
+                            st.session_state.dataset_type = "image"
+                            train_l, val_l, test_l, rep = split_image_dataset(itms)
+                            st.session_state.image_splits = (train_l, val_l, test_l, rep)
+                            st.session_state.image_model_results = None
                         st.rerun()
 
         # Display persistent scan result
@@ -1580,14 +1694,18 @@ elif st.session_state.active_module == "eda":
 
 # =============================================================================
 # MODULE 4: AUTOML STUDIO (TRAIN & PREDICT)
-# =============================================================================
 elif st.session_state.active_module == "automl":
-    st.markdown("### 🤖 Autonomous Machine Learning Engine")
-    st.caption("Dual Engine: 1-Click Scikit-Learn Pipelines with Leaderboards + PyTorch MobileNetV2 Transfer Learning")
+    st.markdown("### 🤖 Autonomous Machine Learning & Universal AI Studio")
+    st.caption("Complete AI Suite: Tabular AutoML | Instant & Deep Vision | NLP Engine | Recommender | Forecasting | Anomaly Detection | Generative AI")
 
-    automl_tab1, automl_tab2 = st.tabs([
-        "📊 Tabular AutoML (Scikit-Learn Leaderboard)", 
-        "📷 Computer Vision AutoML (MobileNetV2 Deep Learning)"
+    automl_tab1, automl_tab2, automl_tab3, automl_tab4, automl_tab5, automl_tab6, automl_tab7 = st.tabs([
+        "📊 Tabular AutoML", 
+        "📷 Computer Vision (Instant & Transfer)",
+        "📝 NLP Studio",
+        "🎯 Recommendation Engine",
+        "📈 Time-Series Forecasting",
+        "🚨 Anomaly Detection",
+        "✨ Generative AI Studio",
     ])
 
     # -------------------------------------------------------------
@@ -1679,216 +1797,757 @@ elif st.session_state.active_module == "automl":
     # -------------------------------------------------------------
     # TAB 2: COMPUTER VISION AUTOML (MOBILENETV2)
     # -------------------------------------------------------------
+    # -------------------------------------------------------------
+    # TAB 2: COMPUTER VISION AUTOML (INSTANT & DEEP LEARNING)
+    # -------------------------------------------------------------
     with automl_tab2:
-        items = st.session_state.image_data_items
-        if not items:
-            st.info("🖼️ No computer vision dataset currently loaded.")
-            c_vi1, c_vi2 = st.columns(2)
-            with c_vi1:
-                if st.button("📁 Go to Ingest to Upload Image ZIP Archive ↗", key="automl_go_ingest_img", use_container_width=True):
-                    st.session_state.active_module = "ingest"
-                    st.rerun()
-            with c_vi2:
-                if st.button("⚡ Test With Animal Images (Cats vs Dogs Sample)", key="automl_animal_load_btn", use_container_width=True):
-                    res_a = scan_dataset_directory(SAMPLE_PATHS["animal_images"])
-                    items_a = [(p, os.path.basename(os.path.dirname(p))) for p in res_a["images"]]
-                    classes_a = res_a["classes"]
-                    st.session_state.image_data_items = items_a
-                    st.session_state.image_classes = classes_a
-                    st.session_state.raw_filename = "animal_images (Sample)"
-                    st.session_state.dataset_type = "image"
-                    train_l, val_l, test_l, rep = split_image_dataset(items_a)
-                    st.session_state.image_splits = (train_l, val_l, test_l, rep)
-                    st.session_state.image_model_results = None
-                    st.rerun()
-        else:
-            classes = st.session_state.image_classes
+        st.markdown("#### 📷 Universal Computer Vision & Instant Image Prediction")
+        st.caption("Zero-Waiting Pre-trained ImageNet Classifier (1,000 Classes) + PyTorch MobileNetV2 Transfer Learning")
+
+        vision_subtab1, vision_subtab2 = st.tabs([
+            "⚡ Instant Image Prediction (Zero Training - Under 50ms)",
+            "🎓 Custom Dataset Transfer Learning (Train on Folder/ZIP)"
+        ])
+
+        # SUBTAB 2A: INSTANT ZERO-WAITING PRETRAINED CLASSIFIER
+        with vision_subtab1:
             st.markdown(
-                f"""
-                <div style="background: #ffffff; border: 2.5px solid #000000; border-radius: 16px; box-shadow: 4px 4px 0px #000000; padding: 16px 20px; margin-bottom: 20px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                        <div>
-                            <span class="neo-badge badge-purple">MOBILENETV2 TRANSFER LEARNING</span>
-                            <span class="neo-badge badge-lime">ACTIVE VISION DATASET</span>
-                        </div>
-                        <div style="font-size: 0.82rem; font-weight: 800; color: #000;">
-                            Hardware: <b>CPU (Optimized for Fast Defense Demo)</b>
-                        </div>
+                """
+                <div style="background: #eff6ff; border: 2.5px solid #000; border-radius: 14px; box-shadow: 3px 3px 0px #000; padding: 14px 18px; margin-bottom: 16px;">
+                    <span class="neo-badge badge-blue">REAL-TIME INFERENCE</span>
+                    <span class="neo-badge badge-lime">&lt; 50ms LATENCY</span>
+                    <div style="font-weight: 800; font-size: 1.05rem; color: #000; margin-top: 6px;">
+                        Instant Zero-Waiting Prediction for ANY Image
                     </div>
-                    <div style="font-size: 1.25rem; font-weight: 900; color: #000; margin-top: 8px;">
-                        📷 {st.session_state.raw_filename}
-                    </div>
-                    <div style="font-size: 0.88rem; color: #475569; font-weight: 600; margin-top: 4px;">
-                        Loaded <b>{len(items):,} total images</b> across <b>{len(classes)} classes</b>: <i>{', '.join(list(classes.keys()))}</i>
+                    <div style="font-size: 0.85rem; color: #334155; font-weight: 600;">
+                        Upload any picture (animal, vehicle, food, electronics, appliance, person, etc.) or test with sample images. 
+                        No long training waits required!
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            c_u1, c_u2 = st.columns([1.2, 1.8])
+            with c_u1:
+                inst_input_src = st.radio("Choose Input:", ["Upload New Photo", "Sample Animal Image"], horizontal=True, key="instant_img_src")
+                chosen_bytes = None
+                display_img = None
 
-            if st.session_state.image_splits is None:
-                train_l, val_l, test_l, rep = split_image_dataset(items)
-                st.session_state.image_splits = (train_l, val_l, test_l, rep)
+                if inst_input_src == "Upload New Photo":
+                    upl_file = st.file_uploader("Upload an image (.jpg, .png, .jpeg, .webp):", type=["jpg", "png", "jpeg", "webp"], key="instant_uploader_field")
+                    if upl_file:
+                        chosen_bytes = upl_file.getvalue()
+                        try:
+                            display_img = Image.open(io.BytesIO(chosen_bytes))
+                        except Exception:
+                            pass
+                else:
+                    sample_dir = SAMPLE_PATHS.get("animal_images", "")
+                    sample_imgs = []
+                    if os.path.isdir(sample_dir):
+                        for root, _, files in os.walk(sample_dir):
+                            for f in files:
+                                if f.lower().endswith((".jpg", ".png", ".jpeg")):
+                                    sample_imgs.append(os.path.join(root, f))
+                    if sample_imgs:
+                        sel_s = st.selectbox("Pick Sample Image:", sample_imgs, format_func=lambda x: f"{os.path.basename(os.path.dirname(x))}/{os.path.basename(x)}", key="instant_sample_picker")
+                        with open(sel_s, "rb") as f:
+                            chosen_bytes = f.read()
+                        try:
+                            display_img = Image.open(sel_s)
+                        except Exception:
+                            pass
+                    else:
+                        st.caption("No sample images located.")
 
-            train_l, val_l, test_l, rep = st.session_state.image_splits
+                if display_img:
+                    st.image(display_img, caption="Selected Image Preview", use_container_width=True)
 
-            # Split status scorecards
-            sk1, sk2, sk3, sk4 = st.columns(4)
-            with sk1:
-                st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Classes</div><div class="neo-card-val">{len(classes)}</div></div>""", unsafe_allow_html=True)
-            with sk2:
-                st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Train Partition</div><div class="neo-card-val">{len(train_l):,}</div></div>""", unsafe_allow_html=True)
-            with sk3:
-                st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Val Partition</div><div class="neo-card-val">{len(val_l):,}</div></div>""", unsafe_allow_html=True)
-            with sk4:
-                st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Held-out Test</div><div class="neo-card-val">{len(test_l):,}</div></div>""", unsafe_allow_html=True)
+            with c_u2:
+                if chosen_bytes is not None:
+                    if st.button("⚡ Run Instant Prediction (Sub-50ms)", key="btn_run_instant_mobilenet", use_container_width=True):
+                        with st.spinner("Classifying image with pre-trained MobileNetV2..."):
+                            pred_res = predict_any_image_instant(chosen_bytes, top_k=5)
+                            st.session_state.instant_img_result = pred_res
 
-            st.markdown("##### ⚙️ Deep Learning Hyperparameters")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                epochs = st.slider("Training Epochs", min_value=1, max_value=10, value=2, key="mobilenet_epochs")
-            with col2:
-                batch_size = st.selectbox("Batch Size", [8, 16, 32], index=1, key="mobilenet_batch")
-            with col3:
-                img_size = st.selectbox("Image Resolution", [128, 224], index=0, format_func=lambda x: f"{x}x{x} (Fast)" if x == 128 else f"{x}x{x} (Standard)", key="mobilenet_res")
-            with col4:
-                quick_test = st.checkbox("⚡ Quick Defense Mode (5-10s demo run)", value=True, key="mobilenet_quick")
+                    if st.session_state.instant_img_result:
+                        res = st.session_state.instant_img_result
+                        st.markdown(
+                            f"""
+                            <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 18px 22px; margin-bottom: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.82rem; font-weight: 800; color: #000; text-transform: uppercase;">
+                                        🎯 Top Prediction:
+                                    </span>
+                                    <span class="neo-badge badge-dark">⚡ {res['inference_time_ms']} ms</span>
+                                </div>
+                                <div style="font-size: 2.2rem; font-weight: 900; color: #000; line-height: 1.15; margin-top: 4px;">
+                                    {res['predicted_class']}
+                                </div>
+                                <div style="font-size: 1.1rem; color: #1e293b; font-weight: 800; margin-top: 4px;">
+                                    Confidence: <b>{res['confidence']}%</b> • Architecture: <i>{res['model_architecture']}</i>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-            if st.button("🚀 Launch MobileNetV2 Deep Learning Training", use_container_width=True, key="btn_train_mobilenet"):
-                p_bar = st.progress(0.0)
-                status_t = st.empty()
+                        top_preds = res["top_predictions"]
+                        import plotly.express as px
+                        df_top = pd.DataFrame(top_preds).sort_values("confidence", ascending=True)
+                        fig_top = px.bar(
+                            df_top,
+                            x="confidence",
+                            y="class",
+                            orientation="h",
+                            color="confidence",
+                            color_continuous_scale="Viridis",
+                            title="Top-5 Model Probability Confidence Scores",
+                            labels={"confidence": "Confidence Score (%)", "class": "Class / Object"},
+                            text="confidence",
+                        )
+                        fig_top.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+                        fig_top.update_layout(
+                            template="plotly_dark",
+                            height=260,
+                            margin=dict(t=40, b=20, l=40, r=30),
+                            paper_bgcolor="rgba(15, 23, 42, 0.4)",
+                            plot_bgcolor="rgba(15, 23, 42, 0.4)",
+                        )
+                        st.plotly_chart(fig_top, use_container_width=True)
+                else:
+                    st.info("👈 Upload an image or select a sample image on the left to test live inference.")
 
-                def cb(cur, tot, m):
-                    p_bar.progress(cur / tot)
-                    status_t.markdown(
+        # SUBTAB 2B: CUSTOM DATASET TRANSFER LEARNING
+        with vision_subtab2:
+            items = st.session_state.image_data_items
+            if not items:
+                st.info("🖼️ No custom computer vision dataset loaded.")
+                c_vi1, c_vi2 = st.columns(2)
+                with c_vi1:
+                    if st.button("📁 Go to Ingest to Upload Image ZIP Archive ↗", key="automl_go_ingest_img", use_container_width=True):
+                        st.session_state.active_module = "ingest"
+                        st.rerun()
+                with c_vi2:
+                    if st.button("⚡ Test With Animal Images (Cats vs Dogs Sample)", key="automl_animal_load_btn", use_container_width=True):
+                        res_a = scan_dataset_directory(SAMPLE_PATHS["animal_images"])
+                        items_a = [(p, os.path.basename(os.path.dirname(p))) for p in res_a["images"]]
+                        classes_a = res_a["classes"]
+                        st.session_state.image_data_items = items_a
+                        st.session_state.image_classes = classes_a
+                        st.session_state.raw_filename = "animal_images (Sample)"
+                        st.session_state.dataset_type = "image"
+                        train_l, val_l, test_l, rep = split_image_dataset(items_a)
+                        st.session_state.image_splits = (train_l, val_l, test_l, rep)
+                        st.session_state.image_model_results = None
+                        st.rerun()
+            else:
+                classes = st.session_state.image_classes
+                st.markdown(
+                    f"""
+                    <div style="background: #ffffff; border: 2.5px solid #000000; border-radius: 16px; box-shadow: 4px 4px 0px #000000; padding: 16px 20px; margin-bottom: 20px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <div>
+                                <span class="neo-badge badge-purple">MOBILENETV2 TRANSFER LEARNING</span>
+                                <span class="neo-badge badge-lime">ACTIVE VISION DATASET</span>
+                            </div>
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #000;">
+                                Hardware: <b>CPU (Optimized for Fast Defense Demo)</b>
+                            </div>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #000; margin-top: 8px;">
+                            📷 {st.session_state.raw_filename}
+                        </div>
+                        <div style="font-size: 0.88rem; color: #475569; font-weight: 600; margin-top: 4px;">
+                            Loaded <b>{len(items):,} total images</b> across <b>{len(classes)} classes</b>: <i>{', '.join(list(classes.keys()))}</i>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if st.session_state.image_splits is None:
+                    train_l, val_l, test_l, rep = split_image_dataset(items)
+                    st.session_state.image_splits = (train_l, val_l, test_l, rep)
+
+                train_l, val_l, test_l, rep = st.session_state.image_splits
+
+                sk1, sk2, sk3, sk4 = st.columns(4)
+                with sk1:
+                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Classes</div><div class="neo-card-val">{len(classes)}</div></div>""", unsafe_allow_html=True)
+                with sk2:
+                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Train Partition</div><div class="neo-card-val">{len(train_l):,}</div></div>""", unsafe_allow_html=True)
+                with sk3:
+                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Val Partition</div><div class="neo-card-val">{len(val_l):,}</div></div>""", unsafe_allow_html=True)
+                with sk4:
+                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Held-out Test</div><div class="neo-card-val">{len(test_l):,}</div></div>""", unsafe_allow_html=True)
+
+                st.markdown("##### ⚙️ Deep Learning Hyperparameters")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    epochs = st.slider("Training Epochs", min_value=1, max_value=10, value=2, key="mobilenet_epochs")
+                with col2:
+                    batch_size = st.selectbox("Batch Size", [8, 16, 32], index=1, key="mobilenet_batch")
+                with col3:
+                    img_size = st.selectbox("Image Resolution", [128, 224], index=0, format_func=lambda x: f"{x}x{x} (Fast)" if x == 128 else f"{x}x{x} (Standard)", key="mobilenet_res")
+                with col4:
+                    quick_test = st.checkbox("⚡ Quick Defense Mode (5-10s demo run)", value=True, key="mobilenet_quick")
+
+                if st.button("🚀 Launch MobileNetV2 Deep Learning Training", use_container_width=True, key="btn_train_mobilenet"):
+                    p_bar = st.progress(0.0)
+                    status_t = st.empty()
+
+                    def cb(cur, tot, m):
+                        p_bar.progress(cur / tot)
+                        status_t.markdown(
+                            f"""
+                            <div style="background: #bef264; border: 2px solid #000; border-radius: 12px; padding: 10px 16px; margin: 8px 0; font-weight: 800; font-size: 0.95rem;">
+                                🔄 Training Epoch {cur}/{tot} — Train Loss: <code>{m['train_loss']:.4f}</code> | Train Acc: <code>{m['train_acc']:.1f}%</code> | Val Loss: <code>{m['val_loss']:.4f}</code> | Val Acc: <code>{m['val_acc']:.1f}%</code>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    with st.spinner("Training MobileNetV2 with Transfer Learning and Data Augmentations..."):
+                        try:
+                            img_res = train_mobilenet_v2(
+                                train_l, val_l, test_l,
+                                epochs=epochs, batch_size=batch_size, img_size=img_size,
+                                quick_test_mode=quick_test, progress_callback=cb,
+                            )
+                            st.session_state.image_model_results = img_res
+                            st.success("✅ MobileNetV2 Transfer Learning Completed Successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Training error: {str(e)}")
+
+                if st.session_state.image_model_results:
+                    res = st.session_state.image_model_results
+                    meta = res["metadata"]
+                    m_metrics = meta["metrics"]
+
+                    st.markdown("---")
+                    st.markdown("#### 🏆 Test Set Performance (Held-out Evaluation)")
+                    m1, m2, m3, m4 = st.columns(4)
+                    with m1:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Test Accuracy</div><div class="neo-card-val">{m_metrics['test_accuracy']}%</div></div>""", unsafe_allow_html=True)
+                    with m2:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Weighted F1</div><div class="neo-card-val">{m_metrics['test_f1']}%</div></div>""", unsafe_allow_html=True)
+                    with m3:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Precision</div><div class="neo-card-val">{m_metrics['test_precision']}%</div></div>""", unsafe_allow_html=True)
+                    with m4:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Recall</div><div class="neo-card-val">{m_metrics['test_recall']}%</div></div>""", unsafe_allow_html=True)
+
+                    c_curve, c_mat = st.columns(2)
+                    with c_curve:
+                        try:
+                            st.plotly_chart(create_training_curves_chart(res["history"]), use_container_width=True)
+                        except Exception as e:
+                            st.caption(f"Convergence Curves: {e}")
+                    with c_mat:
+                        try:
+                            st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), use_container_width=True)
+                        except Exception as e:
+                            st.caption(f"Confusion Matrix: {e}")
+
+                    st.markdown("---")
+                    st.subheader("🔮 Live Custom Model Inference")
+                    c_inf1, c_inf2 = st.columns([1.2, 1.8])
+                    with c_inf1:
+                        infer_mode = st.radio("Choose Test Input:", ["Pick from Test Set", "Upload New Image"], horizontal=True, key="infer_mode_sel")
+                        target_image_input = None
+
+                        if infer_mode == "Pick from Test Set" and test_l:
+                            selected_test_tuple = st.selectbox(
+                                "Select Test Sample:",
+                                options=range(len(test_l)),
+                                format_func=lambda idx: f"#{idx+1}: {os.path.basename(test_l[idx][0])} (True: {test_l[idx][1]})",
+                                key="test_sample_picker"
+                            )
+                            sample_path, true_label = test_l[selected_test_tuple]
+                            target_image_input = sample_path
+                            try:
+                                preview_img = Image.open(sample_path)
+                                st.image(preview_img, caption=f"True Class: {true_label}", use_container_width=True)
+                            except Exception:
+                                pass
+                        else:
+                            uploaded_test_file = st.file_uploader("Upload single test image (.jpg/.png):", type=["jpg", "png", "jpeg"], key="single_test_uploader")
+                            if uploaded_test_file is not None:
+                                target_image_input = uploaded_test_file.getvalue()
+                                try:
+                                    preview_img = Image.open(io.BytesIO(target_image_input))
+                                    st.image(preview_img, caption="Uploaded Test Image", use_container_width=True)
+                                except Exception:
+                                    pass
+
+                    with c_inf2:
+                        if target_image_input is not None:
+                            if st.button("⚡ Run Live Prediction", key="btn_run_single_infer", use_container_width=True):
+                                pred_out = predict_single_image(
+                                    res["model"],
+                                    meta["idx_to_class"],
+                                    target_image_input,
+                                    img_size=img_size,
+                                )
+                                pred_class = pred_out["predicted_class"]
+                                conf = pred_out["confidence"]
+                                probs = pred_out["all_probabilities"]
+
+                                st.markdown(
+                                    f"""
+                                    <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 18px 22px; margin-top: 10px;">
+                                        <div style="font-size: 0.85rem; font-weight: 800; color: #000; text-transform: uppercase;">
+                                            🎯 MobileNetV2 Predicted Class:
+                                        </div>
+                                        <div style="font-size: 2.2rem; font-weight: 900; color: #000;">
+                                            {pred_class} <span style="font-size: 1.1rem; color: #334155; font-weight: 800;">({conf:.1f}% Confidence)</span>
+                                        </div>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+
+                                import plotly.express as px
+                                df_probs = pd.DataFrame(list(probs.items()), columns=["Class", "Confidence %"]).sort_values("Confidence %", ascending=True)
+                                fig_p = px.bar(
+                                    df_probs,
+                                    x="Confidence %",
+                                    y="Class",
+                                    orientation="h",
+                                    color="Confidence %",
+                                    color_continuous_scale="Blues",
+                                    title="Class Probability Distribution",
+                                    text="Confidence %",
+                                )
+                                fig_p.update_layout(template="plotly_dark", height=240, margin=dict(t=35, b=20, l=40, r=20))
+                        else:
+                            st.caption("Select or upload an image on the left to run inference.")
+
+    # -------------------------------------------------------------
+    # TAB 3: NLP STUDIO (SENTIMENT, KEYWORDS & TEXT CLASSIFIER)
+    # -------------------------------------------------------------
+    with automl_tab3:
+        st.markdown("#### 📝 Universal Natural Language Processing (NLP) Studio")
+        st.caption("Sentiment Analysis | Keyword & Bigram Extraction | Extractive Summarization | Trainable Text Classification")
+
+        nlp_tab_a, nlp_tab_b = st.tabs([
+            "💬 Interactive Text Sandbox (Live Sentiment & Summary)",
+            "📊 Dataset Text Column Profiler & Classifier",
+        ])
+
+        with nlp_tab_a:
+            st.markdown(
+                """
+                <div style="background: #fdf4ff; border: 2px solid #000; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; font-weight: 700; font-size: 0.9rem;">
+                    💡 Type or paste any text below (e.g. customer review, tweet, product description, or feedback).
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            sample_prompts = [
+                "The platform is extremely fast, reliable, clean, and exceeded all expectations!",
+                "Terrible customer service, the order was broken, delayed, and completely useless.",
+                "The algorithm operates across multidimensional tabular and vision feature spaces.",
+            ]
+            c_p1, c_p2, c_p3 = st.columns(3)
+            with c_p1:
+                if st.button("Sample: Positive Review", key="nlp_btn_pos", use_container_width=True):
+                    st.session_state["nlp_sample_input"] = sample_prompts[0]
+            with c_p2:
+                if st.button("Sample: Negative Review", key="nlp_btn_neg", use_container_width=True):
+                    st.session_state["nlp_sample_input"] = sample_prompts[1]
+            with c_p3:
+                if st.button("Sample: Technical Text", key="nlp_btn_neu", use_container_width=True):
+                    st.session_state["nlp_sample_input"] = sample_prompts[2]
+
+            user_text = st.text_area(
+                "Input Text:",
+                value=st.session_state.get("nlp_sample_input", sample_prompts[0]),
+                height=110,
+                key="nlp_user_textarea",
+            )
+
+            if st.button("⚡ Analyze Text with NLP Engine", key="nlp_run_btn", use_container_width=True):
+                s_res = analyze_text_sentiment(user_text)
+                sum_res = summarize_text_extractive(user_text, max_sentences=2)
+                kw_res = extract_keywords_and_ngrams(user_text, top_n=8)
+
+                st.markdown("---")
+                c_lbl, c_pol, c_conf = st.columns(3)
+                lbl_color = "badge-lime" if s_res["label"] == "POSITIVE" else ("badge-red" if s_res["label"] == "NEGATIVE" else "badge-yellow")
+                with c_lbl:
+                    st.markdown(
                         f"""
-                        <div style="background: #bef264; border: 2px solid #000; border-radius: 12px; padding: 10px 16px; margin: 8px 0; font-weight: 800; font-size: 0.95rem;">
-                            🔄 Training Epoch {cur}/{tot} — Train Loss: <code>{m['train_loss']:.4f}</code> | Train Acc: <code>{m['train_acc']:.1f}%</code> | Val Loss: <code>{m['val_loss']:.4f}</code> | Val Acc: <code>{m['val_acc']:.1f}%</code>
+                        <div class="neo-card">
+                            <div class="neo-card-title">Sentiment Verdict</div>
+                            <div class="neo-card-val"><span class="neo-badge {lbl_color}">{s_res['label']}</span></div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_pol:
+                    st.markdown(
+                        f"""
+                        <div class="neo-card">
+                            <div class="neo-card-title">Valence Polarity (-1 to +1)</div>
+                            <div class="neo-card-val">{s_res['polarity']:+.2f}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_conf:
+                    st.markdown(
+                        f"""
+                        <div class="neo-card">
+                            <div class="neo-card-title">Model Confidence</div>
+                            <div class="neo-card-val">{s_res['confidence']}%</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
-                with st.spinner("Training MobileNetV2 with Transfer Learning and Data Augmentations..."):
-                    try:
-                        img_res = train_mobilenet_v2(
-                            train_l, val_l, test_l,
-                            epochs=epochs, batch_size=batch_size, img_size=img_size,
-                            quick_test_mode=quick_test, progress_callback=cb,
-                        )
-                        st.session_state.image_model_results = img_res
-                        st.success("✅ MobileNetV2 Transfer Learning Completed Successfully!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Training error: {str(e)}")
-
-            if st.session_state.image_model_results:
-                res = st.session_state.image_model_results
-                meta = res["metadata"]
-                m_metrics = meta["metrics"]
-
-                st.markdown("---")
-                st.markdown("#### 🏆 Test Set Performance (Held-out Evaluation)")
-                m1, m2, m3, m4 = st.columns(4)
-                with m1:
-                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Test Accuracy</div><div class="neo-card-val">{m_metrics['test_accuracy']}%</div></div>""", unsafe_allow_html=True)
-                with m2:
-                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Weighted F1</div><div class="neo-card-val">{m_metrics['test_f1']}%</div></div>""", unsafe_allow_html=True)
-                with m3:
-                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Precision</div><div class="neo-card-val">{m_metrics['test_precision']}%</div></div>""", unsafe_allow_html=True)
-                with m4:
-                    st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Recall</div><div class="neo-card-val">{m_metrics['test_recall']}%</div></div>""", unsafe_allow_html=True)
-
-                c_curve, c_mat = st.columns(2)
-                with c_curve:
-                    try:
-                        st.plotly_chart(create_training_curves_chart(res["history"]), use_container_width=True)
-                    except Exception as e:
-                        st.caption(f"Convergence Curves: {e}")
-                with c_mat:
-                    try:
-                        st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), use_container_width=True)
-                    except Exception as e:
-                        st.caption(f"Confusion Matrix: {e}")
-
-                # Live Single Image Inference
-                st.markdown("---")
-                st.subheader("🔮 Live Single-Image Test Inference")
-                st.caption("Test the trained MobileNetV2 model with any test image or upload a new photo:")
-
-                c_inf1, c_inf2 = st.columns([1.2, 1.8])
-                with c_inf1:
-                    infer_mode = st.radio("Choose Test Input:", ["Pick from Test Set", "Upload New Image"], horizontal=True, key="infer_mode_sel")
-                    target_image_input = None
-                    preview_img = None
-
-                    if infer_mode == "Pick from Test Set" and test_l:
-                        selected_test_tuple = st.selectbox(
-                            "Select Test Sample:",
-                            options=range(len(test_l)),
-                            format_func=lambda idx: f"#{idx+1}: {os.path.basename(test_l[idx][0])} (True: {test_l[idx][1]})",
-                            key="test_sample_picker"
-                        )
-                        sample_path, true_label = test_l[selected_test_tuple]
-                        target_image_input = sample_path
-                        try:
-                            preview_img = Image.open(sample_path)
-                            st.image(preview_img, caption=f"True Class: {true_label}", use_container_width=True)
-                        except Exception:
-                            st.caption(f"Sample: {sample_path}")
+                c_kw, c_sum = st.columns([1.2, 1.8])
+                with c_kw:
+                    st.markdown("##### 🔑 Detected Sentiment Signals & Keywords")
+                    if s_res["detected_keywords"]:
+                        st.markdown(" ".join([f"<span class='neo-badge badge-dark'>{w}</span>" for w in s_res["detected_keywords"]]), unsafe_allow_html=True)
                     else:
-                        uploaded_test_file = st.file_uploader("Upload single test image (.jpg/.png):", type=["jpg", "png", "jpeg"], key="single_test_uploader")
-                        if uploaded_test_file is not None:
-                            target_image_input = uploaded_test_file.getvalue()
+                        st.caption("No strong polarity keywords triggered.")
+
+                with c_sum:
+                    st.markdown("##### 📄 Extractive Summary & Readability")
+                    st.markdown(f"**Key Sentence**: *\"{sum_res['summary']}\"*")
+                    st.caption(f"Word Count: {sum_res['metrics'].get('original_words', 0)} | Reading Time: ~{sum_res['metrics'].get('reading_time_sec', 1)}s")
+
+        with nlp_tab_b:
+            active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
+            if active_df is None:
+                st.info("📊 Please upload a tabular dataset or load a sample from Ingest first.")
+            else:
+                text_candidates = list(active_df.select_dtypes(include=["object", "string"]).columns)
+                if not text_candidates:
+                    text_candidates = list(active_df.columns)
+
+                c_tc1, c_tc2 = st.columns(2)
+                with c_tc1:
+                    sel_text_col = st.selectbox("Select Text Column to Profile:", text_candidates, key="nlp_col_selector")
+                with c_tc2:
+                    label_candidates = ["None (Unsupervised NLP)"] + [c for c in active_df.columns if c != sel_text_col]
+                    sel_label_col = st.selectbox("Optional Label Column (for Classification):", label_candidates, key="nlp_label_selector")
+
+                if st.button("🚀 Run Dataset NLP Profiler", key="btn_run_nlp_dataset", use_container_width=True):
+                    with st.spinner("Executing NLP sentiment & keyword analysis across records..."):
+                        batch_res = analyze_dataset_text_column(active_df, sel_text_col)
+                        kw_res = extract_keywords_and_ngrams(active_df[sel_text_col], top_n=10)
+                        st.session_state.nlp_results = {
+                            "batch": batch_res,
+                            "keywords": kw_res,
+                            "text_col": sel_text_col,
+                        }
+
+                        if sel_label_col != "None (Unsupervised NLP)" and active_df[sel_label_col].nunique() >= 2:
                             try:
-                                preview_img = Image.open(io.BytesIO(target_image_input))
-                                st.image(preview_img, caption="Uploaded Test Image", use_container_width=True)
-                            except Exception:
-                                pass
+                                clf_res = train_text_classifier(active_df, sel_text_col, sel_label_col)
+                                st.session_state.nlp_results["classifier"] = clf_res
+                            except Exception as e:
+                                st.caption(f"Classifier note: {e}")
 
-                with c_inf2:
-                    if target_image_input is not None:
-                        if st.button("⚡ Run Live Prediction", key="btn_run_single_infer", use_container_width=True):
-                            pred_out = predict_single_image(
-                                res["model"],
-                                meta["idx_to_class"],
-                                target_image_input,
-                                img_size=img_size,
-                            )
-                            pred_class = pred_out["predicted_class"]
-                            conf = pred_out["confidence"]
-                            probs = pred_out["all_probabilities"]
+                if st.session_state.nlp_results:
+                    res_nlp = st.session_state.nlp_results
+                    b_res = res_nlp["batch"]
+                    kw_res = res_nlp["keywords"]
 
+                    st.markdown("---")
+                    c_n1, c_n2 = st.columns(2)
+                    with c_n1:
+                        if b_res.get("donut_fig"):
+                            st.plotly_chart(b_res["donut_fig"], use_container_width=True)
+                    with c_n2:
+                        if kw_res.get("chart"):
+                            st.plotly_chart(kw_res["chart"], use_container_width=True)
+
+                    st.markdown("##### 📋 Sample Record Sentiment Annotations")
+                    if b_res.get("sentiment_df") is not None:
+                        st.dataframe(b_res["sentiment_df"], use_container_width=True)
+
+                    if "classifier" in res_nlp:
+                        clf = res_nlp["classifier"]
+                        st.markdown("---")
+                        st.markdown(f"#### 🎯 Trained Text Classifier (`{res_nlp['text_col']}` ➔ `{sel_label_col}`)")
+                        st.markdown(f"**Cross-Validation Score**: `<span class='neo-badge badge-lime'>{clf['cv_score']}%</span>`", unsafe_allow_html=True)
+
+                        test_query = st.text_input("Test Trained Classifier with Live Phrase:", placeholder="Type a test phrase...", key="test_nlp_clf_input")
+                        if test_query:
+                            p_out = clf["predict_fn"](test_query)
                             st.markdown(
                                 f"""
-                                <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 18px 22px; margin-top: 10px;">
-                                    <div style="font-size: 0.85rem; font-weight: 800; color: #000; text-transform: uppercase;">
-                                        🎯 MobileNetV2 Predicted Class:
-                                    </div>
-                                    <div style="font-size: 2.2rem; font-weight: 900; color: #000;">
-                                        {pred_class} <span style="font-size: 1.1rem; color: #334155; font-weight: 800;">({conf:.1f}% Confidence)</span>
-                                    </div>
+                                <div style="background: #bef264; border: 2px solid #000; border-radius: 12px; padding: 12px 18px; font-weight: 800;">
+                                    Predicted Category: <span style="font-size: 1.4rem;">{p_out['prediction']}</span> ({p_out['confidence']}% Confidence)
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
                             )
 
-                            import plotly.express as px
-                            df_probs = pd.DataFrame(list(probs.items()), columns=["Class", "Confidence %"]).sort_values("Confidence %", ascending=True)
-                            fig_p = px.bar(
-                                df_probs,
-                                x="Confidence %",
-                                y="Class",
-                                orientation="h",
-                                color="Confidence %",
-                                color_continuous_scale="Blues",
-                                title="Class Probability Distribution",
-                                text="Confidence %",
-                            )
-                            fig_p.update_layout(template="plotly_dark", height=240, margin=dict(t=35, b=20, l=40, r=20))
-                            st.plotly_chart(fig_p, use_container_width=True)
-                    else:
-                        st.caption("Select or upload an image on the left to run inference.")
+    # -------------------------------------------------------------
+    # TAB 4: RECOMMENDATION ENGINE
+    # -------------------------------------------------------------
+    with automl_tab4:
+        st.markdown("#### 🎯 Universal Recommendation Engine")
+        st.caption("Content-Based Filtering & Hybrid Similarity Matching across Any Tabular Dataset")
+
+        active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
+        if active_df is None:
+            st.info("📊 Please upload a tabular dataset or load a sample from Ingest first.")
+        else:
+            all_cols = list(active_df.columns)
+            r_c1, r_c2 = st.columns([1.5, 2.5])
+            with r_c1:
+                item_col = st.selectbox("Select Item Identifier Column (e.g. Name, ID, Title):", all_cols, index=0, key="rec_item_col")
+            with r_c2:
+                feature_candidates = [c for c in all_cols if c != item_col]
+                default_feats = feature_candidates[:min(len(feature_candidates), 5)]
+                sel_features = st.multiselect("Select Feature Attributes to Benchmark Similarity:", feature_candidates, default=default_feats, key="rec_feature_cols")
+
+            if sel_features:
+                if st.button("⚡ Build Similarity Matrix", key="btn_build_recommender", use_container_width=True):
+                    with st.spinner("Computing high-dimensional Cosine Similarity vectors..."):
+                        try:
+                            rec_engine = build_content_recommender(active_df, item_col=item_col, feature_cols=sel_features)
+                            st.session_state.recommender_results = rec_engine
+                            st.success(f"✅ Recommender initialized across {rec_engine['total_items']:,} unique items!")
+                        except Exception as e:
+                            st.error(f"❌ Recommender error: {str(e)}")
+
+                if st.session_state.recommender_results:
+                    rec_eng = st.session_state.recommender_results
+                    st.markdown("---")
+                    st.markdown("##### 🔍 Query Similar Recommendations for an Item")
+                    available_items = list(rec_eng["df"][item_col])
+
+                    c_sel_item, c_top_n = st.columns([2, 1])
+                    with c_sel_item:
+                        query_item = st.selectbox("Choose Target Item:", available_items[:min(len(available_items), 500)], key="rec_query_item")
+                    with c_top_n:
+                        top_n_val = st.slider("Number of Recommendations:", min_value=3, max_value=10, value=5, key="rec_top_n")
+
+                    rec_out = get_recommendations(rec_eng, selected_item=query_item, top_n=top_n_val)
+
+                    st.plotly_chart(rec_out["chart"], use_container_width=True)
+                    st.markdown("##### 📋 Recommended Items & Feature Attributes")
+                    st.dataframe(rec_out["recommendations_df"], use_container_width=True)
+
+    # -------------------------------------------------------------
+    # TAB 5: TIME-SERIES FORECASTING
+    # -------------------------------------------------------------
+    with automl_tab5:
+        st.markdown("#### 📈 Time-Series Trend & Horizon Forecasting")
+        st.caption("Harmonic Ridge Trend & Seasonality Modeling with 95% Confidence Intervals")
+
+        active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
+        if active_df is None:
+            st.info("📊 Please upload a tabular dataset or load a sample from Ingest first.")
+        else:
+            date_cands, num_cands = detect_time_series_columns(active_df)
+            if not num_cands:
+                st.warning("No numeric columns available for forecasting.")
+            else:
+                f_c1, f_c2, f_c3 = st.columns(3)
+                with f_c1:
+                    date_col_sel = st.selectbox("Select Date / Time Column:", date_cands if date_cands else list(active_df.columns), key="fc_date_col")
+                with f_c2:
+                    val_col_sel = st.selectbox("Select Numeric Metric to Forecast:", num_cands, key="fc_val_col")
+                with f_c3:
+                    horizon_days = st.slider("Forecast Horizon (Steps Ahead):", min_value=7, max_value=90, value=14, key="fc_horizon")
+
+                if st.button("🚀 Train & Project Time-Series Forecast", key="btn_run_forecast", use_container_width=True):
+                    with st.spinner("Preparing monotonic time series and fitting harmonic regression..."):
+                        try:
+                            prep_df = prepare_time_series(active_df, date_col_sel, val_col_sel)
+                            fc_res = train_time_series_forecast(prep_df, date_col_sel, val_col_sel, horizon=horizon_days)
+                            st.session_state.forecasting_results = fc_res
+                            st.success("✅ Forecast projected successfully!")
+                        except Exception as e:
+                            st.error(f"❌ Forecasting error: {str(e)}")
+
+                if st.session_state.forecasting_results:
+                    fc = st.session_state.forecasting_results
+                    m = fc["metrics"]
+
+                    st.markdown("---")
+                    k1, k2, k3, k4 = st.columns(4)
+                    with k1:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Test RMSE</div><div class="neo-card-val">{m['rmse']}</div></div>""", unsafe_allow_html=True)
+                    with k2:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Test MAE</div><div class="neo-card-val">{m['mae']}</div></div>""", unsafe_allow_html=True)
+                    with k3:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">MAPE Error</div><div class="neo-card-val">{m['mape']}%</div></div>""", unsafe_allow_html=True)
+                    with k4:
+                        growth_badge = "badge-lime" if m['expected_growth_pct'] >= 0 else "badge-red"
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Expected Growth</div><div class="neo-card-val"><span class="neo-badge {growth_badge}">{m['expected_growth_pct']:+.1f}%</span></div></div>""", unsafe_allow_html=True)
+
+                    fig_fc = create_forecast_figure(fc["historical_df"], fc["forecast_df"], fc["date_col"], fc["value_col"])
+                    st.plotly_chart(fig_fc, use_container_width=True)
+
+                    with st.expander("🔍 View Tabular Projected Values"):
+                        st.dataframe(fc["forecast_df"], use_container_width=True)
+
+    # -------------------------------------------------------------
+    # TAB 6: ANOMALY DETECTION
+    # -------------------------------------------------------------
+    with automl_tab6:
+        st.markdown("#### 🚨 Unsupervised Anomaly & Outlier Detection")
+        st.caption("Isolation Forest Machine Learning + 2D PCA Spatial Dimensionality Projection")
+
+        active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
+        if active_df is None:
+            st.info("📊 Please upload a tabular dataset or load a sample from Ingest first.")
+        else:
+            num_cols = list(active_df.select_dtypes(include=["number"]).columns)
+            if not num_cols:
+                st.warning("No numeric columns available for anomaly detection.")
+            else:
+                an_c1, an_c2 = st.columns([2.5, 1.5])
+                with an_c1:
+                    sel_anom_cols = st.multiselect("Select Feature Dimensions for Anomaly Audit:", num_cols, default=num_cols[:min(len(num_cols), 6)], key="anom_feature_select")
+                with an_c2:
+                    contamination = st.slider("Expected Contamination (% Anomalies):", min_value=1, max_value=15, value=5, format="%d%%", key="anom_contam_slider") / 100.0
+
+                if sel_anom_cols:
+                    if st.button("⚡ Run Isolation Forest Anomaly Detection", key="btn_run_anomalies", use_container_width=True):
+                        with st.spinner("Training Isolation Forest ensemble and computing PCA projections..."):
+                            try:
+                                anom_res = detect_anomalies(active_df, feature_cols=sel_anom_cols, contamination=contamination)
+                                st.session_state.anomaly_results = anom_res
+                                st.success(f"✅ Anomaly audit complete: {anom_res['anomaly_count']} outliers identified!")
+                            except Exception as e:
+                                st.error(f"❌ Anomaly detection error: {str(e)}")
+
+                    if st.session_state.anomaly_results:
+                        an = st.session_state.anomaly_results
+                        st.markdown("---")
+                        sc1, sc2, sc3 = st.columns(3)
+                        with sc1:
+                            st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Audited Records</div><div class="neo-card-val">{an['total_records']:,}</div></div>""", unsafe_allow_html=True)
+                        with sc2:
+                            st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Flagged Anomalies</div><div class="neo-card-val" style="color: #f43f5e;">{an['anomaly_count']:,}</div></div>""", unsafe_allow_html=True)
+                        with sc3:
+                            st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Anomaly Rate</div><div class="neo-card-val">{an['actual_anomaly_pct']}%</div></div>""", unsafe_allow_html=True)
+
+                        cp1, cp2 = st.columns(2)
+                        with cp1:
+                            st.plotly_chart(an["pca_scatter_fig"], use_container_width=True)
+                        with cp2:
+                            st.plotly_chart(an["score_hist_fig"], use_container_width=True)
+
+                        st.markdown("##### 🚨 Top Outliers & Primary Feature Drivers")
+                        st.dataframe(an["anomalies_only_df"].head(20), use_container_width=True)
+
+                        clean_data = export_clean_dataset_without_anomalies(active_df, an["results_df"])
+                        csv_clean_bytes = clean_data.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            label=f"📥 Download Cleaned Dataset ({len(clean_data):,} rows without anomalies)",
+                            data=csv_clean_bytes,
+                            file_name=f"clean_without_anomalies_{st.session_state.raw_filename or 'data'}.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                            key="btn_download_clean_anom",
+                        )
+
+    # -------------------------------------------------------------
+    # TAB 7: GENERATIVE AI STUDIO
+    # -------------------------------------------------------------
+    with automl_tab7:
+        st.markdown("#### ✨ Generative AI & Synthetic Data Studio")
+        st.caption("Multivariate Synthetic Tabular Data Generation & Strategic AI Executive Storyteller")
+
+        gen_sub1, gen_sub2 = st.tabs([
+            "🧬 Synthetic Tabular Data Generator",
+            "💡 Executive AI Storyteller & Narrative",
+        ])
+
+        active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
+        if active_df is None:
+            st.info("📊 Please upload a tabular dataset or load a sample from Ingest first.")
+        else:
+            with gen_sub1:
+                st.markdown(
+                    """
+                    <div style="background: #f0fdf4; border: 2px solid #000; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; font-weight: 700; font-size: 0.9rem;">
+                        🧬 Synthesize brand-new data points adhering to empirical distributions, categorical proportions, and column schemas.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                g_c1, g_c2 = st.columns([2, 1])
+                with g_c1:
+                    num_synth_rows = st.slider("Number of Synthetic Records to Generate:", min_value=10, max_value=500, value=50, step=10, key="synth_row_slider")
+                with g_c2:
+                    noise_pct = st.slider("Perturbation Level:", min_value=0.01, max_value=0.15, value=0.05, format="%.2f", key="synth_noise_slider")
+
+                if st.button("🚀 Generate Realistic Synthetic Dataset", key="btn_run_synthetic", use_container_width=True):
+                    with st.spinner("Synthesizing multivariate Gaussian perturbed samples..."):
+                        synth_df, synth_meta = generate_synthetic_tabular_data(active_df, num_samples=num_synth_rows, noise_level=noise_pct)
+                        st.session_state.genai_results = {
+                            "synthetic_df": synth_df,
+                            "meta": synth_meta,
+                        }
+                        st.success(f"✅ Generated {num_synth_rows} synthetic records with {synth_meta['fidelity_score_pct']}% statistical fidelity!")
+
+                if st.session_state.genai_results and "synthetic_df" in st.session_state.genai_results:
+                    s_data = st.session_state.genai_results["synthetic_df"]
+                    s_meta = st.session_state.genai_results["meta"]
+
+                    st.markdown("---")
+                    gf1, gf2, gf3 = st.columns(3)
+                    with gf1:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Generated Rows</div><div class="neo-card-val">{s_meta['num_synthetic_records']}</div></div>""", unsafe_allow_html=True)
+                    with gf2:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Statistical Fidelity</div><div class="neo-card-val">{s_meta['fidelity_score_pct']}%</div></div>""", unsafe_allow_html=True)
+                    with gf3:
+                        st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Features Synthesized</div><div class="neo-card-val">{len(s_data.columns)}</div></div>""", unsafe_allow_html=True)
+
+                    st.markdown("##### 📋 Synthetic Data Preview")
+                    st.dataframe(s_data.head(25), use_container_width=True)
+
+                    csv_synth_bytes = s_data.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label=f"📥 Download Synthetic Dataset CSV ({len(s_data)} rows)",
+                        data=csv_synth_bytes,
+                        file_name=f"synthetic_{st.session_state.raw_filename or 'data'}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="btn_download_synth_csv",
+                    )
+
+            with gen_sub2:
+                st.markdown("##### 📋 AI Executive Story & Strategic Brief")
+                st.caption("Synthesizes executive KPI summaries, top 3 growth opportunities, top 3 risk factors, and prescriptive action items.")
+
+                if st.button("⚡ Synthesize Executive Report with Generative AI", key="btn_run_narrative", use_container_width=True):
+                    with st.spinner("Synthesizing strategic business narrative..."):
+                        narrative_res = generate_executive_narrative(
+                            active_df,
+                            dataset_name=st.session_state.raw_filename or "Active Dataset",
+                            groq_api_key=st.session_state.groq_api_key,
+                            groq_model=st.session_state.selected_groq_model,
+                        )
+                        st.session_state.genai_results = st.session_state.genai_results or {}
+                        st.session_state.genai_results["narrative"] = narrative_res
+
+                if st.session_state.genai_results and "narrative" in st.session_state.genai_results:
+                    nar = st.session_state.genai_results["narrative"]
+                    st.markdown("---")
+                    st.markdown(
+                        f"""
+                        <div style="background: #ffffff; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 22px; margin-top: 10px;">
+                            <span class="neo-badge badge-purple">{nar['source']}</span>
+                            <span class="neo-badge badge-lime">{nar['fidelity']}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(nar["narrative"])
 
 
 # =============================================================================

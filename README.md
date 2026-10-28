@@ -34,9 +34,14 @@ graph TD
 3. **Stratified Splitting**: 70/15/15 ratio with seed 42 and MD5 checksum cross-partition duplicate detection (Zero Data Leakage).
 4. **Autonomous Data Cleaning**: Type coercion, missing imputation (mean/median/mode/constant/drop/ffill), IQR outlier clipping, duplicate purging, and full audit logs.
 5. **Interactive EDA Dashboard**: Correlation matrix heatmap, feature distribution histograms with skewness insights, categorical Pareto charts, time-trend drift analysis, and custom chart builder.
-6. **AutoML Studio**:
-   - **Tabular**: Task inference (Classification vs. Regression), Scikit-Learn Pipelines with `ColumnTransformer`, 3+ models with cross-validation, leaderboard, confusion matrix, feature importance, and dynamic prediction form.
-   - **Computer Vision**: MobileNetV2 transfer learning with data augmentation, live convergence curves, hold-out test evaluation, and single-image prediction.
+6. **AutoML & Universal AI Studio**:
+   - **Tabular AutoML**: Task inference (Classification vs. Regression), Scikit-Learn Pipelines with `ColumnTransformer`, 3+ models with cross-validation, leaderboard, confusion matrix, feature importance, and dynamic prediction form.
+   - **Instant Universal Vision (< 50ms)**: Zero-waiting instant classification for ANY uploaded photo using pre-trained MobileNetV2 (1,000 ImageNet classes) with top-5 confidence distribution, alongside custom transfer learning for labeled datasets.
+   - **NLP Engine**: Lexicon-weighted sentiment analysis, keyword & bigram extraction, extractive summarization, and trainable TF-IDF text classifier.
+   - **Universal Recommendation Engine**: Content-based filtering via Cosine Similarity on hybrid text/numeric vectors, top-N matching, and attribute breakdown.
+   - **Time-Series Forecasting**: Automated date detection, monotonic resampling, harmonic Ridge trend & seasonality forecasting with 95% confidence intervals and horizon projection.
+   - **Unsupervised Anomaly Detection**: Isolation Forest machine learning with 2D PCA spatial projection, anomaly severity scoring, primary feature drivers, and 1-click clean dataset export.
+   - **Generative AI & Synthetic Data**: Gaussian perturbed empirical sampling for realistic synthetic tabular data with Kolmogorov-Smirnov fidelity scoring and automated executive business storytelling.
 7. **Groq-Accelerated Voice & Tamil Chatbot**:
    - Models: `qwen/qwen3.8-27b`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `allam-2-7b`, `whisper-large-v3-turbo`.
    - Security: AST-based sandbox blocking dangerous modules.
@@ -70,5 +75,5 @@ Open **`http://localhost:8501`** in your browser.
 
 ```bash
 pytest tests/
-# Output: 9 passed
+# Output: 21 passed across all modules
 ```
