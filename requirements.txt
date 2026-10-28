@@ -1,5 +1,5 @@
 # Core Application & UI
-streamlit>=1.30.0
+streamlit>=1.40.0
 python-dotenv>=1.0.0
 
 # Data Ingestion, Processing & Manipulation

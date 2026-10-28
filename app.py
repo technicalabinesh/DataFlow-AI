@@ -514,37 +514,37 @@ with col_logo:
 
 with col_nav1:
     btn_label = "📁 Ingest" if st.session_state.active_module != "ingest" else "👉 Ingest"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "ingest"
         st.rerun()
 
 with col_nav2:
     btn_label = "🧹 Clean" if st.session_state.active_module != "clean" else "👉 Clean"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "clean"
         st.rerun()
 
 with col_nav3:
     btn_label = "📊 Power BI" if st.session_state.active_module != "eda" else "👉 Power BI"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "eda"
         st.rerun()
 
 with col_nav4:
     btn_label = "🤖 AutoML" if st.session_state.active_module != "automl" else "👉 AutoML"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "automl"
         st.rerun()
 
 with col_nav5:
     btn_label = "💬 Voice AI" if st.session_state.active_module != "chat" else "👉 Voice AI"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "chat"
         st.rerun()
 
 with col_nav6:
     btn_label = "📑 Reports" if st.session_state.active_module != "report" else "👉 Reports"
-    if st.button(btn_label, use_container_width=True):
+    if st.button(btn_label, width="stretch"):
         st.session_state.active_module = "report"
         st.rerun()
 
@@ -584,7 +584,7 @@ with hero_left:
 
     btn_c1, btn_c2 = st.columns([1.5, 1.5])
     with btn_c1:
-        if st.button("⚡ Test With Titanic (1-Click)", key="hero_btn_titanic", use_container_width=True):
+        if st.button("⚡ Test With Titanic (1-Click)", key="hero_btn_titanic", width="stretch"):
             df_t = pd.read_csv(SAMPLE_PATHS["titanic"])
             st.session_state.raw_df = df_t
             st.session_state.cleaned_df = df_t.copy()
@@ -594,7 +594,7 @@ with hero_left:
             st.session_state.ml_results = None
             st.rerun()
     with btn_c2:
-        if st.button("📁 Load Custom Dataset", key="hero_btn_ingest", use_container_width=True):
+        if st.button("📁 Load Custom Dataset", key="hero_btn_ingest", width="stretch"):
             st.session_state.active_module = "ingest"
             st.rerun()
 
@@ -715,7 +715,7 @@ with m_c1:
         </div>
         """
     )
-    if st.button("Open Ingest ↗", key="m_btn_1", use_container_width=True):
+    if st.button("Open Ingest ↗", key="m_btn_1", width="stretch"):
         st.session_state.active_module = "ingest"
         st.rerun()
 
@@ -732,7 +732,7 @@ with m_c2:
         </div>
         """
     )
-    if st.button("Open Cleaner ↗", key="m_btn_2", use_container_width=True):
+    if st.button("Open Cleaner ↗", key="m_btn_2", width="stretch"):
         st.session_state.active_module = "clean"
         st.rerun()
 
@@ -749,7 +749,7 @@ with m_c3:
         </div>
         """
     )
-    if st.button("Open Power BI ↗", key="m_btn_3", use_container_width=True):
+    if st.button("Open Power BI ↗", key="m_btn_3", width="stretch"):
         st.session_state.active_module = "eda"
         st.rerun()
 
@@ -766,7 +766,7 @@ with m_c4:
         </div>
         """
     )
-    if st.button("Open AutoML ↗", key="m_btn_4", use_container_width=True):
+    if st.button("Open AutoML ↗", key="m_btn_4", width="stretch"):
         st.session_state.active_module = "automl"
         st.rerun()
 
@@ -783,7 +783,7 @@ with m_c5:
         </div>
         """
     )
-    if st.button("Open AI ↗", key="m_btn_5", use_container_width=True):
+    if st.button("Open AI ↗", key="m_btn_5", width="stretch"):
         st.session_state.active_module = "chat"
         st.rerun()
 
@@ -800,7 +800,7 @@ with m_c6:
         </div>
         """
     )
-    if st.button("Open Reports ↗", key="m_btn_6", use_container_width=True):
+    if st.button("Open Reports ↗", key="m_btn_6", width="stretch"):
         st.session_state.active_module = "report"
         st.rerun()
 
@@ -976,7 +976,7 @@ if st.session_state.active_module == "ingest":
 
                 c_z1, c_z2 = st.columns([1.5, 2.5])
                 with c_z1:
-                    if st.button("📦 Re-Extract & Re-Scan ZIP", use_container_width=True):
+                    if st.button("📦 Re-Extract & Re-Scan ZIP", width="stretch"):
                         with st.spinner("⚡ Multi-core re-extracting ZIP archive..."):
                             extracted_path, _ = extract_zip_to_raw(uploaded_zip, uploaded_zip.name)
                             st.session_state.scanned_dir = extracted_path
@@ -1003,7 +1003,7 @@ if st.session_state.active_module == "ingest":
                 value="",
                 placeholder="e.g. C:\\Users\\Hari\\Downloads\\cats_and_dogs.zip or data/raw/images"
             )
-            if st.button("🔍 Ingest & Scan Path", use_container_width=False):
+            if st.button("🔍 Ingest & Scan Path", width="content"):
                 clean_path = folder_input_path.strip().strip('"').strip("'")
                 if not clean_path:
                     st.warning("⚠️ Please provide a valid local file or folder path.")
@@ -1079,11 +1079,11 @@ if st.session_state.active_module == "ingest":
                     unsafe_allow_html=True,
                 )
 
-                st.dataframe(pd.DataFrame(list(classes_dict.items()), columns=["Class Label", "Image Count"]), use_container_width=True)
+                st.dataframe(pd.DataFrame(list(classes_dict.items()), columns=["Class Label", "Image Count"]), width="stretch")
 
                 c_ing1, c_ing2 = st.columns([1.5, 1.5])
                 with c_ing1:
-                    if st.button("👉 Proceed to AutoML Vision Studio ↗", key="btn_confirm_go_automl", use_container_width=True):
+                    if st.button("👉 Proceed to AutoML Vision Studio ↗", key="btn_confirm_go_automl", width="stretch"):
                         st.session_state.raw_df = None
                         st.session_state.cleaned_df = None
                         st.session_state.image_data_items = items
@@ -1097,14 +1097,14 @@ if st.session_state.active_module == "ingest":
                         st.rerun()
 
                 with c_ing2:
-                    if st.button("📊 View Vision Analytics in Power BI ↗", key="btn_confirm_go_pbi", use_container_width=True):
+                    if st.button("📊 View Vision Analytics in Power BI ↗", key="btn_confirm_go_pbi", width="stretch"):
                         st.session_state.active_module = "eda"
                         st.rerun()
 
             elif scan_res.get("mode") in ["tables_mergeable", "tables_single"]:
                 if scan_res.get("can_append_tables"):
                     st.info(f"📊 Multiple tables with identical columns found ({len(scan_res['tables'])} files).")
-                    if st.button("🔗 Append & Combine All Tables", use_container_width=True):
+                    if st.button("🔗 Append & Combine All Tables", width="stretch"):
                         combined_df, _ = load_and_append_tables(scan_res["tables"])
                         if combined_df is not None:
                             st.session_state.raw_df = combined_df
@@ -1116,7 +1116,7 @@ if st.session_state.active_module == "ingest":
             elif scan_res.get("mode") in ["tables_mergeable", "tables_single"]:
                 if scan_res.get("can_append_tables"):
                     st.info(f"📊 Multiple tables with identical columns found ({len(scan_res['tables'])} files).")
-                    if st.button("🔗 Append & Combine All Tables", use_container_width=True):
+                    if st.button("🔗 Append & Combine All Tables", width="stretch"):
                         combined_df, _ = load_and_append_tables(scan_res["tables"])
                         if combined_df is not None:
                             st.session_state.raw_df = combined_df
@@ -1146,7 +1146,7 @@ if st.session_state.active_module == "ingest":
             st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Memory Size</div><div class="neo-card-val">{summary['memory_mb']} MB</div></div>""", unsafe_allow_html=True)
 
         st.markdown("##### 🔍 Data Preview (First 10 Records)")
-        st.dataframe(df.head(10), use_container_width=True)
+        st.dataframe(df.head(10), width="stretch")
 
         # Tabular Stratified Split
         st.markdown("---")
@@ -1163,7 +1163,7 @@ if st.session_state.active_module == "ingest":
         test_pct_val = 100 - (train_slider + val_slider)
         st.caption(f"Calculated Hold-out Test Split: **{test_pct_val}%**")
 
-        if st.button("⚡ Execute Stratified Split", use_container_width=True):
+        if st.button("⚡ Execute Stratified Split", width="stretch"):
             train_df, val_df, test_df, s_report = split_tabular_data(
                 df,
                 target_col=target_col,
@@ -1182,7 +1182,7 @@ if st.session_state.active_module == "ingest":
                 st.error(f"🛑 {rep['leakage_warning']}")
             else:
                 st.info("🛡️ Zero Data Leakage Verified: Checksum MD5 validation passed across train and test partitions.")
-            st.plotly_chart(create_split_distribution_chart(rep), use_container_width=True)
+            st.plotly_chart(create_split_distribution_chart(rep), width="stretch")
 
     # Data Profiling & Split (Image)
     elif st.session_state.dataset_type == "image" and st.session_state.image_data_items:
@@ -1232,7 +1232,7 @@ if st.session_state.active_module == "ingest":
                 with img_cols[idx]:
                     try:
                         im = Image.open(p)
-                        st.image(im, caption=f"Class: {l}", use_container_width=True)
+                        st.image(im, caption=f"Class: {l}", width="stretch")
                     except Exception:
                         st.caption(f"{l} (image)")
 
@@ -1248,7 +1248,7 @@ if st.session_state.active_module == "ingest":
         v_test_pct = 100 - (v_train_slider + v_val_slider)
         st.caption(f"Calculated Hold-out Test Split: **{v_test_pct}%**")
 
-        if st.button("⚡ Execute Vision Stratified Split", key="btn_v_split_exec", use_container_width=True):
+        if st.button("⚡ Execute Vision Stratified Split", key="btn_v_split_exec", width="stretch"):
             train_l, val_l, test_l, rep = split_image_dataset(
                 items,
                 train_ratio=v_train_slider / 100.0,
@@ -1283,7 +1283,7 @@ if st.session_state.active_module == "ingest":
                 unsafe_allow_html=True,
             )
         with c_next2:
-            if st.button("👉 Proceed to AutoML Vision Studio ↗", key="goto_vision_automl_btn", use_container_width=True):
+            if st.button("👉 Proceed to AutoML Vision Studio ↗", key="goto_vision_automl_btn", width="stretch"):
                 st.session_state.active_module = "automl"
                 st.rerun()
 
@@ -1327,7 +1327,7 @@ elif st.session_state.active_module == "clean":
             """,
             unsafe_allow_html=True,
         )
-        if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", use_container_width=True):
+        if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
             st.session_state.active_module = "automl"
             st.rerun()
 
@@ -1351,7 +1351,7 @@ elif st.session_state.active_module == "clean":
         with c5:
             auto_coerce = st.checkbox("Auto-Coerce Data Types (Numbers/Dates as text)", value=True)
 
-        if st.button("🚀 Run Full Autonomous Cleaning Pipeline", use_container_width=True):
+        if st.button("🚀 Run Full Autonomous Cleaning Pipeline", width="stretch"):
             with st.spinner("Executing transformations and generating audit log..."):
                 cleaned_df, log = execute_full_cleaning_pipeline(
                     df,
@@ -1390,13 +1390,13 @@ elif st.session_state.active_module == "clean":
             col_d1, col_d2, col_d3 = st.columns(3)
             with col_d1:
                 csv_bytes = get_downloadable_bytes(c_df, "csv")
-                st.download_button("📥 Download Cleaned CSV", data=csv_bytes, file_name="cleaned_dataset.csv", mime="text/csv", use_container_width=True)
+                st.download_button("📥 Download Cleaned CSV", data=csv_bytes, file_name="cleaned_dataset.csv", mime="text/csv", width="stretch")
             with col_d2:
                 excel_bytes = get_downloadable_bytes(c_df, "excel")
-                st.download_button("📥 Download Cleaned Excel (.xlsx)", data=excel_bytes, file_name="cleaned_dataset.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                st.download_button("📥 Download Cleaned Excel (.xlsx)", data=excel_bytes, file_name="cleaned_dataset.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
             with col_d3:
                 log_txt = "\n".join(st.session_state.cleaning_log).encode("utf-8")
-                st.download_button("📥 Download Audit Log (.txt)", data=log_txt, file_name="cleaning_audit_log.txt", mime="text/plain", use_container_width=True)
+                st.download_button("📥 Download Audit Log (.txt)", data=log_txt, file_name="cleaning_audit_log.txt", mime="text/plain", width="stretch")
 
 
 # =============================================================================
@@ -1423,11 +1423,11 @@ elif st.session_state.active_module == "eda":
 
         c_v1, c_v2 = st.columns(2)
         with c_v1:
-            st.plotly_chart(fig_donut, use_container_width=True)
+            st.plotly_chart(fig_donut, width="stretch")
         with c_v2:
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width="stretch")
 
-        if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", use_container_width=True):
+        if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
             st.session_state.active_module = "automl"
             st.rerun()
 
@@ -1494,7 +1494,7 @@ elif st.session_state.active_module == "eda":
                     mask = filtered_df.astype(str).apply(lambda row: row.str.contains(search_q, case=False).any(), axis=1)
                     filtered_df = filtered_df[mask]
 
-                if st.button("🔄 Reset Slicers", key="reset_slicers_btn", use_container_width=True):
+                if st.button("🔄 Reset Slicers", key="reset_slicers_btn", width="stretch"):
                     filtered_df = active_df.copy()
                     st.rerun()
 
@@ -1608,7 +1608,7 @@ elif st.session_state.active_module == "eda":
             if cat_cols:
                 donut_target = cat_cols[0]
                 fig_donut, ins_donut = generate_powerbi_donut(filtered_df, donut_target)
-                st.plotly_chart(fig_donut, use_container_width=True)
+                st.plotly_chart(fig_donut, width="stretch")
                 st.info(ins_donut)
             else:
                 st.caption("No categorical feature available for Donut visual.")
@@ -1618,7 +1618,7 @@ elif st.session_state.active_module == "eda":
                 bar_cat = cat_cols[min(len(cat_cols)-1, 1)]
                 bar_num = num_cols[0] if num_cols else None
                 fig_bar, ins_bar = generate_powerbi_clustered_bar(filtered_df, bar_cat, bar_num)
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar, width="stretch")
                 st.info(ins_bar)
             else:
                 st.caption("No categorical feature available for Clustered Bar visual.")
@@ -1627,7 +1627,7 @@ elif st.session_state.active_module == "eda":
         with v_row2_col1:
             fig_corr, ins_corr = generate_correlation_heatmap(filtered_df)
             if fig_corr:
-                st.plotly_chart(fig_corr, use_container_width=True)
+                st.plotly_chart(fig_corr, width="stretch")
                 st.info(ins_corr)
             else:
                 st.caption(ins_corr)
@@ -1637,11 +1637,11 @@ elif st.session_state.active_module == "eda":
             if date_candidates and num_cols:
                 fig_area, ins_area = generate_powerbi_area(filtered_df, date_candidates[0], num_cols[0])
                 if fig_area:
-                    st.plotly_chart(fig_area, use_container_width=True)
+                    st.plotly_chart(fig_area, width="stretch")
                     st.info(ins_area)
             elif num_cols:
                 fig_dist, ins_dist = generate_distribution_chart(filtered_df, num_cols[0])
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist, width="stretch")
                 st.info(ins_dist)
 
         # 4. POWER BI TREEMAP & GAUGE ROW
@@ -1652,7 +1652,7 @@ elif st.session_state.active_module == "eda":
                 tm_col = cat_cols[0]
                 tm_val = num_cols[0] if num_cols else None
                 fig_tm, ins_tm = generate_powerbi_treemap(filtered_df, tm_col, tm_val)
-                st.plotly_chart(fig_tm, use_container_width=True)
+                st.plotly_chart(fig_tm, width="stretch")
                 st.info(ins_tm)
         with v_row3_col2:
             if num_cols:
@@ -1661,7 +1661,7 @@ elif st.session_state.active_module == "eda":
                 cur_mean = float(filtered_df[target_col_gauge].mean()) if not filtered_df.empty else 0
                 max_metric = float(active_df[target_col_gauge].max()) if not active_df.empty else 100
                 fig_gauge = generate_powerbi_gauge(cur_mean, 0, max_metric, f"Average {target_col_gauge}")
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                st.plotly_chart(fig_gauge, width="stretch")
                 st.caption(f"Gauge tracking average {target_col_gauge} across active filters.")
 
         # 5. POWER BI MATRIX / PIVOT SUMMARY TABLE
@@ -1672,7 +1672,7 @@ elif st.session_state.active_module == "eda":
             m_cat = st.selectbox("Matrix Row Dimension (Category):", cat_cols, key="matrix_cat_sel")
             m_num = st.selectbox("Matrix Value Dimension (Metric):", num_cols, key="matrix_num_sel")
             matrix_df = generate_powerbi_matrix(filtered_df, m_cat, m_num)
-            st.dataframe(matrix_df, use_container_width=True)
+            st.dataframe(matrix_df, width="stretch")
 
         # 6. POWER BI CUSTOM VISUAL STUDIO
         st.markdown("---")
@@ -1688,7 +1688,7 @@ elif st.session_state.active_module == "eda":
             pbi_grp = st.selectbox("Color / Legend:", ["None"] + list(filtered_df.columns), key="pbi_studio_grp")
 
         custom_pbi_fig = build_custom_chart(filtered_df, pbi_vtype, pbi_x, pbi_y, pbi_grp)
-        st.plotly_chart(custom_pbi_fig, use_container_width=True)
+        st.plotly_chart(custom_pbi_fig, width="stretch")
 
 
 
@@ -1717,7 +1717,7 @@ elif st.session_state.active_module == "automl":
             st.info("📊 No tabular dataset currently loaded.")
             c_tb1, c_tb2 = st.columns(2)
             with c_tb1:
-                if st.button("⚡ Test With Titanic (1-Click Sample)", key="automl_titanic_load_btn", use_container_width=True):
+                if st.button("⚡ Test With Titanic (1-Click Sample)", key="automl_titanic_load_btn", width="stretch"):
                     df_t = pd.read_csv(SAMPLE_PATHS["titanic"])
                     st.session_state.raw_df = df_t
                     st.session_state.cleaned_df = df_t.copy()
@@ -1727,7 +1727,7 @@ elif st.session_state.active_module == "automl":
                     st.session_state.ml_results = None
                     st.rerun()
             with c_tb2:
-                if st.button("📁 Go to Ingest to Load CSV / Excel ↗", key="automl_go_ingest_tab", use_container_width=True):
+                if st.button("📁 Go to Ingest to Load CSV / Excel ↗", key="automl_go_ingest_tab", width="stretch"):
                     st.session_state.active_module = "ingest"
                     st.rerun()
         else:
@@ -1746,7 +1746,7 @@ elif st.session_state.active_module == "automl":
 
             train_df, _, test_df, _ = st.session_state.tabular_splits
 
-            if st.button("🚀 Train 3+ ML Pipelines (1-Click)", key="btn_train_tabular_pipes", use_container_width=True):
+            if st.button("🚀 Train 3+ ML Pipelines (1-Click)", key="btn_train_tabular_pipes", width="stretch"):
                 with st.spinner("Executing scikit-learn pipelines with cross-validation..."):
                     res = train_tabular_models(train_df, test_df, target_col=target_col)
                     st.session_state.ml_results = res
@@ -1755,16 +1755,16 @@ elif st.session_state.active_module == "automl":
             if st.session_state.ml_results:
                 res = st.session_state.ml_results
                 st.markdown("### 🏆 Model Comparison Leaderboard (Evaluated on Held-out Test Set)")
-                st.dataframe(res["leaderboard"], use_container_width=True)
+                st.dataframe(res["leaderboard"], width="stretch")
                 st.markdown(f"**Best Selected Pipeline**: `{res['best_model_name']}`")
 
                 cA, cB = st.columns(2)
                 with cA:
                     if res.get("confusion_matrix_fig"):
-                        st.plotly_chart(res["confusion_matrix_fig"], use_container_width=True)
+                        st.plotly_chart(res["confusion_matrix_fig"], width="stretch")
                 with cB:
                     if res.get("feature_importance_fig"):
-                        st.plotly_chart(res["feature_importance_fig"], use_container_width=True)
+                        st.plotly_chart(res["feature_importance_fig"], width="stretch")
 
                 # Dynamic Prediction Form
                 st.markdown("---")
@@ -1861,11 +1861,11 @@ elif st.session_state.active_module == "automl":
                         st.caption("No sample images located.")
 
                 if display_img:
-                    st.image(display_img, caption="Selected Image Preview", use_container_width=True)
+                    st.image(display_img, caption="Selected Image Preview", width="stretch")
 
             with c_u2:
                 if chosen_bytes is not None:
-                    if st.button("⚡ Run Instant Prediction (Sub-50ms)", key="btn_run_instant_mobilenet", use_container_width=True):
+                    if st.button("⚡ Run Instant Prediction (Sub-50ms)", key="btn_run_instant_mobilenet", width="stretch"):
                         with st.spinner("Classifying image with pre-trained MobileNetV2..."):
                             pred_res = predict_any_image_instant(chosen_bytes, top_k=5)
                             st.session_state.instant_img_result = pred_res
@@ -1914,7 +1914,7 @@ elif st.session_state.active_module == "automl":
                             paper_bgcolor="rgba(15, 23, 42, 0.4)",
                             plot_bgcolor="rgba(15, 23, 42, 0.4)",
                         )
-                        st.plotly_chart(fig_top, use_container_width=True)
+                        st.plotly_chart(fig_top, width="stretch")
                 else:
                     st.info("👈 Upload an image or select a sample image on the left to test live inference.")
 
@@ -1925,11 +1925,11 @@ elif st.session_state.active_module == "automl":
                 st.info("🖼️ No custom computer vision dataset loaded.")
                 c_vi1, c_vi2 = st.columns(2)
                 with c_vi1:
-                    if st.button("📁 Go to Ingest to Upload Image ZIP Archive ↗", key="automl_go_ingest_img", use_container_width=True):
+                    if st.button("📁 Go to Ingest to Upload Image ZIP Archive ↗", key="automl_go_ingest_img", width="stretch"):
                         st.session_state.active_module = "ingest"
                         st.rerun()
                 with c_vi2:
-                    if st.button("⚡ Test With Animal Images (Cats vs Dogs Sample)", key="automl_animal_load_btn", use_container_width=True):
+                    if st.button("⚡ Test With Animal Images (Cats vs Dogs Sample)", key="automl_animal_load_btn", width="stretch"):
                         res_a = scan_dataset_directory(SAMPLE_PATHS["animal_images"])
                         items_a = [(p, os.path.basename(os.path.dirname(p))) for p in res_a["images"]]
                         classes_a = res_a["classes"]
@@ -1993,7 +1993,7 @@ elif st.session_state.active_module == "automl":
                 with col4:
                     quick_test = st.checkbox("⚡ Quick Defense Mode (5-10s demo run)", value=True, key="mobilenet_quick")
 
-                if st.button("🚀 Launch MobileNetV2 Deep Learning Training", use_container_width=True, key="btn_train_mobilenet"):
+                if st.button("🚀 Launch MobileNetV2 Deep Learning Training", width="stretch", key="btn_train_mobilenet"):
                     p_bar = st.progress(0.0)
                     status_t = st.empty()
 
@@ -2041,12 +2041,12 @@ elif st.session_state.active_module == "automl":
                     c_curve, c_mat = st.columns(2)
                     with c_curve:
                         try:
-                            st.plotly_chart(create_training_curves_chart(res["history"]), use_container_width=True)
+                            st.plotly_chart(create_training_curves_chart(res["history"]), width="stretch")
                         except Exception as e:
                             st.caption(f"Convergence Curves: {e}")
                     with c_mat:
                         try:
-                            st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), use_container_width=True)
+                            st.plotly_chart(create_confusion_matrix_chart(meta["confusion_matrix"], meta["classes"]), width="stretch")
                         except Exception as e:
                             st.caption(f"Confusion Matrix: {e}")
 
@@ -2068,7 +2068,7 @@ elif st.session_state.active_module == "automl":
                             target_image_input = sample_path
                             try:
                                 preview_img = Image.open(sample_path)
-                                st.image(preview_img, caption=f"True Class: {true_label}", use_container_width=True)
+                                st.image(preview_img, caption=f"True Class: {true_label}", width="stretch")
                             except Exception:
                                 pass
                         else:
@@ -2077,13 +2077,13 @@ elif st.session_state.active_module == "automl":
                                 target_image_input = uploaded_test_file.getvalue()
                                 try:
                                     preview_img = Image.open(io.BytesIO(target_image_input))
-                                    st.image(preview_img, caption="Uploaded Test Image", use_container_width=True)
+                                    st.image(preview_img, caption="Uploaded Test Image", width="stretch")
                                 except Exception:
                                     pass
 
                     with c_inf2:
                         if target_image_input is not None:
-                            if st.button("⚡ Run Live Prediction", key="btn_run_single_infer", use_container_width=True):
+                            if st.button("⚡ Run Live Prediction", key="btn_run_single_infer", width="stretch"):
                                 pred_out = predict_single_image(
                                     res["model"],
                                     meta["idx_to_class"],
@@ -2152,13 +2152,13 @@ elif st.session_state.active_module == "automl":
             ]
             c_p1, c_p2, c_p3 = st.columns(3)
             with c_p1:
-                if st.button("Sample: Positive Review", key="nlp_btn_pos", use_container_width=True):
+                if st.button("Sample: Positive Review", key="nlp_btn_pos", width="stretch"):
                     st.session_state["nlp_sample_input"] = sample_prompts[0]
             with c_p2:
-                if st.button("Sample: Negative Review", key="nlp_btn_neg", use_container_width=True):
+                if st.button("Sample: Negative Review", key="nlp_btn_neg", width="stretch"):
                     st.session_state["nlp_sample_input"] = sample_prompts[1]
             with c_p3:
-                if st.button("Sample: Technical Text", key="nlp_btn_neu", use_container_width=True):
+                if st.button("Sample: Technical Text", key="nlp_btn_neu", width="stretch"):
                     st.session_state["nlp_sample_input"] = sample_prompts[2]
 
             user_text = st.text_area(
@@ -2168,7 +2168,7 @@ elif st.session_state.active_module == "automl":
                 key="nlp_user_textarea",
             )
 
-            if st.button("⚡ Analyze Text with NLP Engine", key="nlp_run_btn", use_container_width=True):
+            if st.button("⚡ Analyze Text with NLP Engine", key="nlp_run_btn", width="stretch"):
                 s_res = analyze_text_sentiment(user_text)
                 sum_res = summarize_text_extractive(user_text, max_sentences=2)
                 kw_res = extract_keywords_and_ngrams(user_text, top_n=8)
@@ -2236,7 +2236,7 @@ elif st.session_state.active_module == "automl":
                     label_candidates = ["None (Unsupervised NLP)"] + [c for c in active_df.columns if c != sel_text_col]
                     sel_label_col = st.selectbox("Optional Label Column (for Classification):", label_candidates, key="nlp_label_selector")
 
-                if st.button("🚀 Run Dataset NLP Profiler", key="btn_run_nlp_dataset", use_container_width=True):
+                if st.button("🚀 Run Dataset NLP Profiler", key="btn_run_nlp_dataset", width="stretch"):
                     with st.spinner("Executing NLP sentiment & keyword analysis across records..."):
                         batch_res = analyze_dataset_text_column(active_df, sel_text_col)
                         kw_res = extract_keywords_and_ngrams(active_df[sel_text_col], top_n=10)
@@ -2262,14 +2262,14 @@ elif st.session_state.active_module == "automl":
                     c_n1, c_n2 = st.columns(2)
                     with c_n1:
                         if b_res.get("donut_fig"):
-                            st.plotly_chart(b_res["donut_fig"], use_container_width=True)
+                            st.plotly_chart(b_res["donut_fig"], width="stretch")
                     with c_n2:
                         if kw_res.get("chart"):
-                            st.plotly_chart(kw_res["chart"], use_container_width=True)
+                            st.plotly_chart(kw_res["chart"], width="stretch")
 
                     st.markdown("##### 📋 Sample Record Sentiment Annotations")
                     if b_res.get("sentiment_df") is not None:
-                        st.dataframe(b_res["sentiment_df"], use_container_width=True)
+                        st.dataframe(b_res["sentiment_df"], width="stretch")
 
                     if "classifier" in res_nlp:
                         clf = res_nlp["classifier"]
@@ -2310,7 +2310,7 @@ elif st.session_state.active_module == "automl":
                 sel_features = st.multiselect("Select Feature Attributes to Benchmark Similarity:", feature_candidates, default=default_feats, key="rec_feature_cols")
 
             if sel_features:
-                if st.button("⚡ Build Similarity Matrix", key="btn_build_recommender", use_container_width=True):
+                if st.button("⚡ Build Similarity Matrix", key="btn_build_recommender", width="stretch"):
                     with st.spinner("Computing high-dimensional Cosine Similarity vectors..."):
                         try:
                             rec_engine = build_content_recommender(active_df, item_col=item_col, feature_cols=sel_features)
@@ -2333,9 +2333,9 @@ elif st.session_state.active_module == "automl":
 
                     rec_out = get_recommendations(rec_eng, selected_item=query_item, top_n=top_n_val)
 
-                    st.plotly_chart(rec_out["chart"], use_container_width=True)
+                    st.plotly_chart(rec_out["chart"], width="stretch")
                     st.markdown("##### 📋 Recommended Items & Feature Attributes")
-                    st.dataframe(rec_out["recommendations_df"], use_container_width=True)
+                    st.dataframe(rec_out["recommendations_df"], width="stretch")
 
     # -------------------------------------------------------------
     # TAB 5: TIME-SERIES FORECASTING
@@ -2360,7 +2360,7 @@ elif st.session_state.active_module == "automl":
                 with f_c3:
                     horizon_days = st.slider("Forecast Horizon (Steps Ahead):", min_value=7, max_value=90, value=14, key="fc_horizon")
 
-                if st.button("🚀 Train & Project Time-Series Forecast", key="btn_run_forecast", use_container_width=True):
+                if st.button("🚀 Train & Project Time-Series Forecast", key="btn_run_forecast", width="stretch"):
                     with st.spinner("Preparing monotonic time series and fitting harmonic regression..."):
                         try:
                             prep_df = prepare_time_series(active_df, date_col_sel, val_col_sel)
@@ -2387,10 +2387,10 @@ elif st.session_state.active_module == "automl":
                         st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Expected Growth</div><div class="neo-card-val"><span class="neo-badge {growth_badge}">{m['expected_growth_pct']:+.1f}%</span></div></div>""", unsafe_allow_html=True)
 
                     fig_fc = create_forecast_figure(fc["historical_df"], fc["forecast_df"], fc["date_col"], fc["value_col"])
-                    st.plotly_chart(fig_fc, use_container_width=True)
+                    st.plotly_chart(fig_fc, width="stretch")
 
                     with st.expander("🔍 View Tabular Projected Values"):
-                        st.dataframe(fc["forecast_df"], use_container_width=True)
+                        st.dataframe(fc["forecast_df"], width="stretch")
 
     # -------------------------------------------------------------
     # TAB 6: ANOMALY DETECTION
@@ -2414,7 +2414,7 @@ elif st.session_state.active_module == "automl":
                     contamination = st.slider("Expected Contamination (% Anomalies):", min_value=1, max_value=15, value=5, format="%d%%", key="anom_contam_slider") / 100.0
 
                 if sel_anom_cols:
-                    if st.button("⚡ Run Isolation Forest Anomaly Detection", key="btn_run_anomalies", use_container_width=True):
+                    if st.button("⚡ Run Isolation Forest Anomaly Detection", key="btn_run_anomalies", width="stretch"):
                         with st.spinner("Training Isolation Forest ensemble and computing PCA projections..."):
                             try:
                                 anom_res = detect_anomalies(active_df, feature_cols=sel_anom_cols, contamination=contamination)
@@ -2436,12 +2436,12 @@ elif st.session_state.active_module == "automl":
 
                         cp1, cp2 = st.columns(2)
                         with cp1:
-                            st.plotly_chart(an["pca_scatter_fig"], use_container_width=True)
+                            st.plotly_chart(an["pca_scatter_fig"], width="stretch")
                         with cp2:
-                            st.plotly_chart(an["score_hist_fig"], use_container_width=True)
+                            st.plotly_chart(an["score_hist_fig"], width="stretch")
 
                         st.markdown("##### 🚨 Top Outliers & Primary Feature Drivers")
-                        st.dataframe(an["anomalies_only_df"].head(20), use_container_width=True)
+                        st.dataframe(an["anomalies_only_df"].head(20), width="stretch")
 
                         clean_data = export_clean_dataset_without_anomalies(active_df, an["results_df"])
                         csv_clean_bytes = clean_data.to_csv(index=False).encode("utf-8")
@@ -2450,7 +2450,7 @@ elif st.session_state.active_module == "automl":
                             data=csv_clean_bytes,
                             file_name=f"clean_without_anomalies_{st.session_state.raw_filename or 'data'}.csv",
                             mime="text/csv",
-                            use_container_width=True,
+                            width="stretch",
                             key="btn_download_clean_anom",
                         )
 
@@ -2485,7 +2485,7 @@ elif st.session_state.active_module == "automl":
                 with g_c2:
                     noise_pct = st.slider("Perturbation Level:", min_value=0.01, max_value=0.15, value=0.05, format="%.2f", key="synth_noise_slider")
 
-                if st.button("🚀 Generate Realistic Synthetic Dataset", key="btn_run_synthetic", use_container_width=True):
+                if st.button("🚀 Generate Realistic Synthetic Dataset", key="btn_run_synthetic", width="stretch"):
                     with st.spinner("Synthesizing multivariate Gaussian perturbed samples..."):
                         synth_df, synth_meta = generate_synthetic_tabular_data(active_df, num_samples=num_synth_rows, noise_level=noise_pct)
                         st.session_state.genai_results = {
@@ -2508,7 +2508,7 @@ elif st.session_state.active_module == "automl":
                         st.markdown(f"""<div class="neo-card"><div class="neo-card-title">Features Synthesized</div><div class="neo-card-val">{len(s_data.columns)}</div></div>""", unsafe_allow_html=True)
 
                     st.markdown("##### 📋 Synthetic Data Preview")
-                    st.dataframe(s_data.head(25), use_container_width=True)
+                    st.dataframe(s_data.head(25), width="stretch")
 
                     csv_synth_bytes = s_data.to_csv(index=False).encode("utf-8")
                     st.download_button(
@@ -2516,7 +2516,7 @@ elif st.session_state.active_module == "automl":
                         data=csv_synth_bytes,
                         file_name=f"synthetic_{st.session_state.raw_filename or 'data'}.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width="stretch",
                         key="btn_download_synth_csv",
                     )
 
@@ -2524,7 +2524,7 @@ elif st.session_state.active_module == "automl":
                 st.markdown("##### 📋 AI Executive Story & Strategic Brief")
                 st.caption("Synthesizes executive KPI summaries, top 3 growth opportunities, top 3 risk factors, and prescriptive action items.")
 
-                if st.button("⚡ Synthesize Executive Report with Generative AI", key="btn_run_narrative", use_container_width=True):
+                if st.button("⚡ Synthesize Executive Report with Generative AI", key="btn_run_narrative", width="stretch"):
                     with st.spinner("Synthesizing strategic business narrative..."):
                         narrative_res = generate_executive_narrative(
                             active_df,
@@ -2614,7 +2614,7 @@ elif st.session_state.active_module == "chat":
                     file_name=f"Chat_Responses_{st.session_state.raw_filename or 'Dataset'}.json",
                     mime="application/json",
                     disabled=len(st.session_state.chat_history) == 0,
-                    use_container_width=True,
+                    width="stretch",
                 )
             with d_c2:
                 transcript_lines = []
@@ -2631,10 +2631,10 @@ elif st.session_state.active_module == "chat":
                     file_name=f"Chat_Transcript_{st.session_state.raw_filename or 'Dataset'}.txt",
                     mime="text/plain",
                     disabled=len(st.session_state.chat_history) == 0,
-                    use_container_width=True,
+                    width="stretch",
                 )
             with d_c3:
-                if st.button("🗑️ Clear Chat History", use_container_width=True):
+                if st.button("🗑️ Clear Chat History", width="stretch"):
                     st.session_state.chat_history = []
                     st.rerun()
 
@@ -2646,7 +2646,7 @@ elif st.session_state.active_module == "chat":
                     with st.expander("🛠️ View Generated Python Code"):
                         st.code(msg["code"], language="python")
                 if "result_df" in msg and msg["result_df"] is not None:
-                    st.dataframe(msg["result_df"], use_container_width=True)
+                    st.dataframe(msg["result_df"], width="stretch")
 
         # Chat Input Box
         prompt = st.chat_input("Ask any question in English or தமிழ் (e.g., 'What is the average fare?' or 'எத்தனை பதிவுகள் உள்ளன?'):")
@@ -2691,10 +2691,10 @@ elif st.session_state.active_module == "chat":
                     saved_df = None
 
                     if exec_res["type"] == "dataframe":
-                        st.dataframe(res_obj, use_container_width=True)
+                        st.dataframe(res_obj, width="stretch")
                         saved_df = res_obj
                     elif exec_res["type"] == "chart":
-                        st.plotly_chart(res_obj, use_container_width=True)
+                        st.plotly_chart(res_obj, width="stretch")
                     elif exec_res["type"] == "scalar":
                         st.markdown(f"**Computed Value**: `{res_obj}`")
                     elif exec_res["type"] == "error":
@@ -2761,7 +2761,7 @@ elif st.session_state.active_module == "report":
                 data=pdf_bytes,
                 file_name=f"Executive_Audit_{st.session_state.raw_filename or 'Dataset'}.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
             )
 
         with rep_c2:
@@ -2779,7 +2779,7 @@ elif st.session_state.active_module == "report":
                 data=docx_bytes,
                 file_name=f"Executive_Report_{st.session_state.raw_filename or 'Dataset'}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
+                width="stretch",
             )
 
         with rep_c3:
@@ -2797,6 +2797,6 @@ elif st.session_state.active_module == "report":
                 data=json_str.encode("utf-8"),
                 file_name=f"Session_Responses_{st.session_state.raw_filename or 'Dataset'}.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
 
