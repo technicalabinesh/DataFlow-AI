@@ -593,7 +593,8 @@ def init_session():
         "groq_api_key": os.getenv("GROQ_API_KEY", ""),
         "selected_groq_model": "qwen/qwen3.8-27b",
         "selected_whisper_model": "whisper-large-v3-turbo",
-        "active_module": "ingest",  # 'ingest', 'clean', 'eda', 'automl', 'chat', 'report'
+        "active_module": "ingest",
+        "active_automl_subtab": "tabular",  # 'ingest', 'clean', 'eda', 'automl', 'chat', 'report'
         "language": "English",
         "scanned_dir": None,
         "scan_res": None,
@@ -1329,6 +1330,7 @@ if st.session_state.active_module == "ingest":
             )
         with c_next2:
             if st.button("👉 Proceed to AutoML Vision Studio ↗", key="goto_vision_automl_btn", width="stretch"):
+                st.session_state.active_automl_subtab = "vision"
                 st.session_state.active_module = "automl"
                 st.rerun()
 
@@ -1373,6 +1375,7 @@ elif st.session_state.active_module == "clean":
             unsafe_allow_html=True,
         )
         if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
+            st.session_state.active_automl_subtab = "vision"
             st.session_state.active_module = "automl"
             st.rerun()
 
@@ -1473,6 +1476,7 @@ elif st.session_state.active_module == "eda":
             st.plotly_chart(fig_bar, width="stretch")
 
         if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
+            st.session_state.active_automl_subtab = "vision"
             st.session_state.active_module = "automl"
             st.rerun()
 
@@ -1745,20 +1749,162 @@ elif st.session_state.active_module == "automl":
     st.markdown("### 🤖 Autonomous Machine Learning & Universal AI Studio")
     st.caption("Complete AI Suite: Tabular AutoML | Instant & Deep Vision | NLP Engine | Recommender | Forecasting | Anomaly Detection | Generative AI")
 
-    automl_tab1, automl_tab2, automl_tab3, automl_tab4, automl_tab5, automl_tab6, automl_tab7 = st.tabs([
-        "📊 Tabular AutoML", 
-        "📷 Computer Vision (Instant & Transfer)",
-        "📝 NLP Studio",
-        "🎯 Recommendation Engine",
-        "📈 Time-Series Forecasting",
-        "🚨 Anomaly Detection",
-        "✨ Generative AI Studio",
-    ])
+    # Ensure default subtab is initialized
+    if "active_automl_subtab" not in st.session_state or not st.session_state.active_automl_subtab:
+        st.session_state.active_automl_subtab = "vision" if st.session_state.dataset_type == "image" else "tabular"
+
+    # -----------------------------------------------------------------------------
+    # 7 AI STUDIO SUITES & DIRECT UNIFIED ACTIONS (MATCHING MILESTONE CARDS)
+    # -----------------------------------------------------------------------------
+    st.markdown("##### 📌 AI Studio Suites & Unified Direct Actions 🔗")
+    c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns(7)
+
+    with c_s1:
+        is_act1 = (st.session_state.active_automl_subtab == "tabular")
+        style_act1 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act1 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act1}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-purple" style="font-size: 0.60rem; padding: 2px 7px;">Suite 1</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">TABULAR</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Tabular AutoML</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">3+ Models & 5-Fold CV</div>
+            </div>
+            '''
+        )
+        btn_lbl1 = "● Active Suite" if is_act1 else "Open Tabular ↗"
+        if st.button(btn_lbl1, key="ai_suite_btn_1", width="stretch"):
+            st.session_state.active_automl_subtab = "tabular"
+            st.rerun()
+
+    with c_s2:
+        is_act2 = (st.session_state.active_automl_subtab == "vision")
+        style_act2 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act2 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act2}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-cyan" style="font-size: 0.60rem; padding: 2px 7px;">Suite 2</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">VISION</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📷 Computer Vision</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">MobileNetV2 & Transfer</div>
+            </div>
+            '''
+        )
+        btn_lbl2 = "● Active Suite" if is_act2 else "Open Vision ↗"
+        if st.button(btn_lbl2, key="ai_suite_btn_2", width="stretch"):
+            st.session_state.active_automl_subtab = "vision"
+            st.rerun()
+
+    with c_s3:
+        is_act3 = (st.session_state.active_automl_subtab == "nlp")
+        style_act3 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act3 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act3}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-yellow" style="font-size: 0.60rem; padding: 2px 7px;">Suite 3</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">NLP</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📝 NLP Studio</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Sentiment & Text Clf</div>
+            </div>
+            '''
+        )
+        btn_lbl3 = "● Active Suite" if is_act3 else "Open NLP ↗"
+        if st.button(btn_lbl3, key="ai_suite_btn_3", width="stretch"):
+            st.session_state.active_automl_subtab = "nlp"
+            st.rerun()
+
+    with c_s4:
+        is_act4 = (st.session_state.active_automl_subtab == "rec")
+        style_act4 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act4 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act4}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-lime" style="font-size: 0.60rem; padding: 2px 7px;">Suite 4</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">RECOMMENDER</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🎯 Recommender</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Cosine Sim & Top-N</div>
+            </div>
+            '''
+        )
+        btn_lbl4 = "● Active Suite" if is_act4 else "Open Recommender ↗"
+        if st.button(btn_lbl4, key="ai_suite_btn_4", width="stretch"):
+            st.session_state.active_automl_subtab = "rec"
+            st.rerun()
+
+    with c_s5:
+        is_act5 = (st.session_state.active_automl_subtab == "forecast")
+        style_act5 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act5 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act5}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-purple" style="font-size: 0.60rem; padding: 2px 7px;">Suite 5</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">FORECAST</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📈 Time-Series</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Harmonic Ridge & CI</div>
+            </div>
+            '''
+        )
+        btn_lbl5 = "● Active Suite" if is_act5 else "Open Forecast ↗"
+        if st.button(btn_lbl5, key="ai_suite_btn_5", width="stretch"):
+            st.session_state.active_automl_subtab = "forecast"
+            st.rerun()
+
+    with c_s6:
+        is_act6 = (st.session_state.active_automl_subtab == "anomaly")
+        style_act6 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act6 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act6}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-yellow" style="font-size: 0.60rem; padding: 2px 7px;">Suite 6</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">ANOMALY</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🚨 Anomaly Engine</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Isolation Forest & PCA</div>
+            </div>
+            '''
+        )
+        btn_lbl6 = "● Active Suite" if is_act6 else "Open Anomaly ↗"
+        if st.button(btn_lbl6, key="ai_suite_btn_6", width="stretch"):
+            st.session_state.active_automl_subtab = "anomaly"
+            st.rerun()
+
+    with c_s7:
+        is_act7 = (st.session_state.active_automl_subtab == "genai")
+        style_act7 = "border: 2.5px solid #8b5cf6; box-shadow: 4px 4px 0px #8b5cf6; background: #faf5ff;" if is_act7 else ""
+        st.html(
+            f'''
+            <div class="milestone-card" style="{style_act7}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-cyan" style="font-size: 0.60rem; padding: 2px 7px;">Suite 7</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.60rem; padding: 2px 7px;">GEN AI</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.84rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">✨ Generative AI</div>
+                <div style="font-size: 0.70rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Synthetic Data & Story</div>
+            </div>
+            '''
+        )
+        btn_lbl7 = "● Active Suite" if is_act7 else "Open GenAI ↗"
+        if st.button(btn_lbl7, key="ai_suite_btn_7", width="stretch"):
+            st.session_state.active_automl_subtab = "genai"
+            st.rerun()
+
+    st.markdown("<hr style='border: 1.5px solid #000; margin-top: 18px; margin-bottom: 22px;'>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------
-    # TAB 1: TABULAR AUTOML (SCIKIT-LEARN)
+    # SUITE 1: TABULAR AUTOML (SCIKIT-LEARN)
     # -------------------------------------------------------------
-    with automl_tab1:
+    if st.session_state.active_automl_subtab == "tabular":
         active_df = st.session_state.cleaned_df if st.session_state.cleaned_df is not None else st.session_state.raw_df
         if active_df is None:
             st.info("📊 No tabular dataset currently loaded.")
@@ -1842,12 +1988,9 @@ elif st.session_state.active_module == "automl":
                         )
 
     # -------------------------------------------------------------
-    # TAB 2: COMPUTER VISION AUTOML (MOBILENETV2)
+    # SUITE 2: COMPUTER VISION AUTOML (INSTANT & DEEP LEARNING)
     # -------------------------------------------------------------
-    # -------------------------------------------------------------
-    # TAB 2: COMPUTER VISION AUTOML (INSTANT & DEEP LEARNING)
-    # -------------------------------------------------------------
-    with automl_tab2:
+    elif st.session_state.active_automl_subtab == "vision":
         st.markdown("#### 📷 Universal Computer Vision & Instant Image Prediction")
         st.caption("Zero-Waiting Pre-trained ImageNet Classifier (1,000 Classes) + PyTorch MobileNetV2 Transfer Learning")
 
@@ -2172,9 +2315,9 @@ elif st.session_state.active_module == "automl":
                             st.caption("Select or upload an image on the left to run inference.")
 
     # -------------------------------------------------------------
-    # TAB 3: NLP STUDIO (SENTIMENT, KEYWORDS & TEXT CLASSIFIER)
+    # SUITE 3: NLP STUDIO (SENTIMENT, KEYWORDS & TEXT CLASSIFIER)
     # -------------------------------------------------------------
-    with automl_tab3:
+    elif st.session_state.active_automl_subtab == "nlp":
         st.markdown("#### 📝 Universal Natural Language Processing (NLP) Studio")
         st.caption("Sentiment Analysis | Keyword & Bigram Extraction | Extractive Summarization | Trainable Text Classification")
 
@@ -2337,9 +2480,9 @@ elif st.session_state.active_module == "automl":
                             )
 
     # -------------------------------------------------------------
-    # TAB 4: RECOMMENDATION ENGINE
+    # SUITE 4: RECOMMENDATION ENGINE
     # -------------------------------------------------------------
-    with automl_tab4:
+    elif st.session_state.active_automl_subtab == "rec":
         st.markdown("#### 🎯 Universal Recommendation Engine")
         st.caption("Content-Based Filtering & Hybrid Similarity Matching across Any Tabular Dataset")
 
@@ -2385,9 +2528,9 @@ elif st.session_state.active_module == "automl":
                     st.dataframe(rec_out["recommendations_df"], width="stretch")
 
     # -------------------------------------------------------------
-    # TAB 5: TIME-SERIES FORECASTING
+    # SUITE 5: TIME-SERIES FORECASTING
     # -------------------------------------------------------------
-    with automl_tab5:
+    elif st.session_state.active_automl_subtab == "forecast":
         st.markdown("#### 📈 Time-Series Trend & Horizon Forecasting")
         st.caption("Harmonic Ridge Trend & Seasonality Modeling with 95% Confidence Intervals")
 
@@ -2440,9 +2583,9 @@ elif st.session_state.active_module == "automl":
                         st.dataframe(fc["forecast_df"], width="stretch")
 
     # -------------------------------------------------------------
-    # TAB 6: ANOMALY DETECTION
+    # SUITE 6: ANOMALY DETECTION
     # -------------------------------------------------------------
-    with automl_tab6:
+    elif st.session_state.active_automl_subtab == "anomaly":
         st.markdown("#### 🚨 Unsupervised Anomaly & Outlier Detection")
         st.caption("Isolation Forest Machine Learning + 2D PCA Spatial Dimensionality Projection")
 
@@ -2502,9 +2645,9 @@ elif st.session_state.active_module == "automl":
                         )
 
     # -------------------------------------------------------------
-    # TAB 7: GENERATIVE AI STUDIO
+    # SUITE 7: GENERATIVE AI STUDIO
     # -------------------------------------------------------------
-    with automl_tab7:
+    elif st.session_state.active_automl_subtab == "genai":
         st.markdown("#### ✨ Generative AI & Synthetic Data Studio")
         st.caption("Multivariate Synthetic Tabular Data Generation & Strategic AI Executive Storyteller")
 
