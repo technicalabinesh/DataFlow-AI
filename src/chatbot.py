@@ -28,6 +28,8 @@ import traceback
 from typing import Dict, Any, List, Tuple, Optional
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from gtts import gTTS
 
 # Try importing Groq
@@ -107,21 +109,29 @@ def generate_groq_pandas_code(
         "total_rows": len(df),
     }
 
-    system_prompt = f"""You are an expert Data Scientist & Python Programmer.
-You have access to a pandas DataFrame named `df`.
-Here is the schema and 3 sample records:
-Columns: {schema_info['columns']}
-Data Types: {schema_info['dtypes']}
-Total Rows: {schema_info['total_rows']}
-Sample Data: {schema_info['sample_rows']}
+    system_prompt = f"""You are an elite Principal Data Scientist & Python Programmer.
+You have access to a clean pandas DataFrame named `df`.
+Dataset Schema & Metadata:
+- Columns: {schema_info['columns']}
+- Data Types: {schema_info['dtypes']}
+- Total Rows: {schema_info['total_rows']:,}
+- Sample Head Records: {schema_info['sample_rows']}
 
-Rules:
-1. Write ONLY executable Python code using pandas (`pd`), numpy (`np`), or plotly.express (`px`).
-2. Always assign the final result to a variable named `result`.
-3. If the user asks for a chart, assign the Plotly figure to `result`.
-4. If the question cannot be answered from the available columns, assign: result = "This question cannot be answered from the dataset's available columns."
-5. Do NOT include any markdown formatting, backticks (```), or comments. Return ONLY valid Python code.
-6. The user query language preference is: {language}.
+Strict Code Generation Guidelines:
+1. Return ONLY pure, valid, executable Python code. Never include markdown formatting, backticks (```), or narrative prose.
+2. Only use pandas (`pd`), numpy (`np`), or plotly.express (`px`). Do not import any other libraries.
+3. ALWAYS assign the final analytical outcome to a variable named `result`.
+4. Output types for `result`:
+   - Tabular aggregations, subsets, or grouped metrics: assign a pandas DataFrame or Series.
+   - Visualizations: assign a Plotly Express figure (`result = px.bar(...)`, `px.scatter(...)`, `px.pie(...)`, etc.). Apply clean styling.
+   - Single numerical or text metrics: assign a scalar (number or string).
+5. Robustness & Safe Execution:
+   - Only reference columns that explicitly exist in the provided schema.
+   - Handle missing/NaN values gracefully (e.g. `.dropna()` before calculating mean/median).
+   - If numeric conversion is needed, use `pd.to_numeric(df['col'], errors='coerce')`.
+   - If the user query is outside the available dataset features, assign:
+     result = "This question cannot be answered from the dataset's available columns."
+6. Preferred output language: {language}.
 """
 
     client = Groq(api_key=api_key)
@@ -172,11 +182,13 @@ def execute_safe_query(code: str, df: pd.DataFrame) -> Dict[str, Any]:
         "__builtins__": {
             "len": len, "range": range, "sum": sum, "min": min, "max": max,
             "round": round, "str": str, "int": int, "float": float, "list": list,
-            "dict": dict, "set": set, "bool": bool, "print": print,
+            "dict": dict, "set": set, "bool": bool, "print": print, "abs": abs,
+            "sorted": sorted, "enumerate": enumerate, "zip": zip,
         },
         "pd": pd,
         "np": np,
-        "px": px if "px" in globals() else None,
+        "px": px,
+        "go": go,
     }
     local_env = {"df": df.copy(), "result": None}
 

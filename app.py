@@ -7,6 +7,9 @@ Main Application Entry Point (app.py)
 """
 
 import os
+import re
+import zipfile
+from typing import Tuple, Dict, Any, List, Optional, Union
 import io
 import json
 import time
@@ -113,6 +116,118 @@ except ImportError:
 # Ensure sample datasets exist
 SAMPLE_PATHS = ensure_sample_datasets()
 
+# -----------------------------------------------------------------------------
+# PERFORMANCE CACHING & TOP-LEVEL HELPER ROUTINES
+# -----------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def cached_load_tabular_from_bytes(
+    file_bytes: bytes,
+    filename: str,
+    selected_sheet: Optional[str] = None,
+    max_sample_rows: Optional[int] = None,
+):
+    """Cached loader for tabular datasets (CSV, Excel, Parquet, JSON)."""
+    return load_tabular_from_bytes(file_bytes, filename, selected_sheet, max_sample_rows)
+
+
+@st.cache_data(show_spinner=False)
+def cached_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
+    """Cached computation of dataset summary statistics."""
+    return compute_dataset_summary(df)
+
+
+@st.cache_resource(show_spinner=False)
+def cached_pretrained_mobilenet():
+    """Cached loader for pre-trained MobileNetV2 weights (ImageNet-1k)."""
+    from src.image_trainer import get_pretrained_mobilenet_v2
+    return get_pretrained_mobilenet_v2()
+
+
+def resolve_image_items_from_scan(s_res, target_dir):
+    """
+    Robust image item and class resolver moved to top-level helper module.
+    Prevents scoping errors and ensures clean reuse across modules.
+    """
+    if not s_res or not s_res.get("images"):
+        return [], {}
+
+    # Priority 1: Use pre-synchronized items from scanner engine
+    if s_res.get("image_items") and len(s_res["image_items"]) == len(s_res["images"]):
+        items = s_res["image_items"]
+        cls_dict = s_res.get("classes", {})
+        if not cls_dict or len(cls_dict) <= 1:
+            cls_dict = {}
+            for _, l in items:
+                cls_dict[l] = cls_dict.get(l, 0) + 1
+        return items, cls_dict
+
+    raw_images = s_res["images"]
+    generic_names = {"images", "image", "img", "imgs", "photos", "pictures", "data", "dataset", "raw", "extracted", "archive", "content", "unlabeled"}
+    split_names = {"train", "val", "validation", "test", "testing"}
+
+    parent_map = {p: os.path.basename(os.path.dirname(p)).strip() for p in raw_images}
+    unique_parents = set(parent_map.values())
+    non_generic_parents = unique_parents - generic_names - split_names
+
+    # 1. Pre-split structure (e.g. train/cats/1.jpg)
+    if s_res.get("mode") == "images_presplit" or any(s.lower() in split_names for s in unique_parents):
+        itms = []
+        for p in raw_images:
+            p_name = parent_map[p]
+            if p_name.lower() in split_names:
+                fname = os.path.splitext(os.path.basename(p))[0]
+                m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
+                lbl = m.group(1).lower() if (m and len(m.group(1)) >= 2) else p_name.lower()
+            else:
+                lbl = p_name
+            itms.append((p, lbl))
+        cls_dict = {}
+        for _, l in itms:
+            cls_dict[l] = cls_dict.get(l, 0) + 1
+        return itms, cls_dict
+
+    # 2. Distinct non-generic class folders (e.g. .../images/cats/1.jpg, .../images/dogs/2.jpg)
+    if len(non_generic_parents) >= 2:
+        itms = [(p, parent_map[p]) for p in raw_images]
+        cls_dict = {}
+        for _, l in itms:
+            cls_dict[l] = cls_dict.get(l, 0) + 1
+        return itms, cls_dict
+
+    # 3. Filename prefix (e.g. .../images/cat.1.jpg, .../images/dog.1.jpg, .../cat_01.jpg)
+    prefix_map = {}
+    for p in raw_images:
+        fname = os.path.splitext(os.path.basename(p))[0]
+        m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
+        if m and len(m.group(1)) >= 2:
+            prefix_map[p] = m.group(1).lower()
+
+    unique_prefixes = set(prefix_map.values())
+    if len(unique_prefixes) >= 2 and len(prefix_map) >= len(raw_images) * 0.6:
+        itms = [(p, prefix_map.get(p, "other")) for p in raw_images]
+        cls_dict = {}
+        for _, l in itms:
+            cls_dict[l] = cls_dict.get(l, 0) + 1
+        return itms, cls_dict
+
+    # 4. Grandparent directory (e.g. .../cats/images/1.jpg)
+    gp_map = {p: os.path.basename(os.path.dirname(os.path.dirname(p))).strip() for p in raw_images}
+    non_generic_gps = set(gp_map.values()) - generic_names - split_names
+    if len(non_generic_gps) >= 2:
+        itms = [(p, gp_map[p]) for p in raw_images]
+        cls_dict = {}
+        for _, l in itms:
+            cls_dict[l] = cls_dict.get(l, 0) + 1
+        return itms, cls_dict
+
+    # Fallback
+    itms = [(p, parent_map[p] if parent_map[p] not in generic_names else "general") for p in raw_images]
+    cls_dict = {}
+    for _, l in itms:
+        cls_dict[l] = cls_dict.get(l, 0) + 1
+    return itms, cls_dict
+
+
 # Page configuration
 st.set_page_config(
     page_title="DataFlow | Universal AI Analyst",
@@ -126,11 +241,11 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 NEOBRUTALISM_CSS = """
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap');
 
     /* Global Base */
     html, body, [class*="css"], .stApp {
-        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
         background-color: #f7f6f0 !important;
         color: #111827 !important;
     }
@@ -149,47 +264,54 @@ NEOBRUTALISM_CSS = """
 
     /* Captions & Subtitles */
     .stCaption, [data-testid="stCaptionContainer"] p, [data-testid="stCaptionContainer"] {
-        color: #334155 !important;
+        color: #475569 !important;
         font-weight: 600 !important;
         font-size: 0.85rem !important;
     }
 
-    /* Streamlit Tabs - Modern Neobrutalist Capsules */
+    /* Streamlit Tabs - Sleek Minimalist & Active Purple Line (Matches Attachment 1) */
     div[data-testid="stTabs"] {
-        margin-top: 12px;
+        margin-top: 10px;
         margin-bottom: 22px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+        gap: 6px;
+        background-color: transparent !important;
     }
     div[data-testid="stTabs"] button[data-baseweb="tab"] {
-        background-color: #ffffff !important;
-        border: 2px solid #000000 !important;
-        border-radius: 9999px !important;
-        padding: 8px 22px !important;
-        margin-right: 12px !important;
-        box-shadow: 3px 3px 0px #000000 !important;
-        transition: all 0.15s ease !important;
+        background-color: transparent !important;
+        border: none !important;
+        border-bottom: 3.5px solid transparent !important;
+        border-radius: 6px 6px 0 0 !important;
+        padding: 8px 18px !important;
+        margin-right: 6px !important;
+        box-shadow: none !important;
+        transition: all 0.18s ease-in-out !important;
     }
     div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {
-        transform: translate(-1px, -1px);
-        box-shadow: 4px 4px 0px #000000 !important;
+        background-color: rgba(139, 92, 246, 0.08) !important;
+        border-bottom: 3.5px solid #c084fc !important;
+        transform: none !important;
     }
     div[data-testid="stTabs"] button[data-baseweb="tab"] p,
     div[data-testid="stTabs"] button[data-baseweb="tab"] div,
     div[data-testid="stTabs"] button[data-baseweb="tab"] span {
-        color: #000000 !important;
-        font-weight: 800 !important;
-        font-size: 0.9rem !important;
+        color: #334155 !important;
+        font-weight: 700 !important;
+        font-size: 0.92rem !important;
     }
     div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #bef264 !important;
-        border: 2.5px solid #000000 !important;
+        background-color: transparent !important;
+        border-bottom: 3.5px solid #8b5cf6 !important;
     }
-    div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p {
-        color: #000000 !important;
+    div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p,
+    div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] span {
+        color: #0f172a !important;
         font-weight: 900 !important;
     }
-    div[data-testid="stTabs"] div[data-baseweb="tab-highlight"],
-    div[data-testid="stTabs"] div[data-baseweb="tab-border"] {
-        display: none !important;
+    div[data-testid="stTabs"] div[data-baseweb="tab-highlight"] {
+        background-color: #8b5cf6 !important;
     }
 
     /* File Uploader Container - High Contrast */
@@ -379,10 +501,10 @@ NEOBRUTALISM_CSS = """
         font-weight: 800 !important;
     }
 
-    /* Milestone Cards at Bottom */
+    /* Milestone Cards at Bottom (Matches Attachment 2) */
     .milestone-card {
         background: #ffffff;
-        border: 2px solid #000000;
+        border: 2.5px solid #000000;
         border-radius: 16px;
         box-shadow: 4px 4px 0px #000000;
         padding: 12px 14px;
@@ -841,100 +963,23 @@ if st.session_state.active_module == "ingest":
                 if st.checkbox("Enable sampling (read first 50,000 rows)", value=True):
                     max_sample_rows = 50000
 
-            df, meta = load_tabular_from_bytes(file_bytes, filename, selected_sheet, max_sample_rows)
+            try:
+                df, meta = cached_load_tabular_from_bytes(file_bytes, filename, selected_sheet, max_sample_rows)
 
-            if meta.get("error"):
-                st.error(f"❌ {meta['error']}")
-            else:
-                save_raw_file(file_bytes, filename)
-                st.session_state.raw_df = df
-                st.session_state.cleaned_df = df.copy()
-                st.session_state.raw_filename = filename
-                st.session_state.dataset_type = "tabular"
-                st.session_state.tabular_splits = None
-                st.session_state.ml_results = None
-
-                st.success(f"✅ Successfully ingested **{filename}** (Saved untouched in `data/raw/`).")
-
-    def resolve_image_items_from_scan(s_res, target_dir):
-        if not s_res or not s_res.get("images"):
-            return [], {}
-
-        # Priority 1: Use pre-synchronized items from scanner engine
-        if s_res.get("image_items") and len(s_res["image_items"]) == len(s_res["images"]):
-            items = s_res["image_items"]
-            cls_dict = s_res.get("classes", {})
-            if not cls_dict or len(cls_dict) <= 1:
-                cls_dict = {}
-                for _, l in items:
-                    cls_dict[l] = cls_dict.get(l, 0) + 1
-            return items, cls_dict
-
-        raw_images = s_res["images"]
-        generic_names = {"images", "image", "img", "imgs", "photos", "pictures", "data", "dataset", "raw", "extracted", "archive", "content", "unlabeled"}
-        split_names = {"train", "val", "validation", "test", "testing"}
-
-        parent_map = {p: os.path.basename(os.path.dirname(p)).strip() for p in raw_images}
-        unique_parents = set(parent_map.values())
-        non_generic_parents = unique_parents - generic_names - split_names
-
-        # 1. Pre-split structure (e.g. train/cats/1.jpg)
-        if s_res.get("mode") == "images_presplit" or any(s.lower() in split_names for s in unique_parents):
-            itms = []
-            for p in raw_images:
-                p_name = parent_map[p]
-                if p_name.lower() in split_names:
-                    fname = os.path.splitext(os.path.basename(p))[0]
-                    m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
-                    lbl = m.group(1).lower() if (m and len(m.group(1)) >= 2) else p_name.lower()
+                if meta.get("error"):
+                    st.error(f"❌ {meta['error']}")
                 else:
-                    lbl = p_name
-                itms.append((p, lbl))
-            cls_dict = {}
-            for _, l in itms:
-                cls_dict[l] = cls_dict.get(l, 0) + 1
-            return itms, cls_dict
+                    save_raw_file(file_bytes, filename)
+                    st.session_state.raw_df = df
+                    st.session_state.cleaned_df = df.copy()
+                    st.session_state.raw_filename = filename
+                    st.session_state.dataset_type = "tabular"
+                    st.session_state.tabular_splits = None
+                    st.session_state.ml_results = None
 
-        # 2. Distinct non-generic class folders (e.g. .../images/cats/1.jpg, .../images/dogs/2.jpg)
-        if len(non_generic_parents) >= 2:
-            itms = [(p, parent_map[p]) for p in raw_images]
-            cls_dict = {}
-            for _, l in itms:
-                cls_dict[l] = cls_dict.get(l, 0) + 1
-            return itms, cls_dict
-
-        # 3. Filename prefix (e.g. .../images/cat.1.jpg, .../images/dog.1.jpg, .../cat_01.jpg)
-        prefix_map = {}
-        for p in raw_images:
-            fname = os.path.splitext(os.path.basename(p))[0]
-            m = re.match(r"^([a-zA-Z]+)[._\-\s]", fname) or re.match(r"^([a-zA-Z]+)", fname)
-            if m and len(m.group(1)) >= 2:
-                prefix_map[p] = m.group(1).lower()
-
-        unique_prefixes = set(prefix_map.values())
-        if len(unique_prefixes) >= 2 and len(prefix_map) >= len(raw_images) * 0.6:
-            itms = [(p, prefix_map.get(p, "other")) for p in raw_images]
-            cls_dict = {}
-            for _, l in itms:
-                cls_dict[l] = cls_dict.get(l, 0) + 1
-            return itms, cls_dict
-
-        # 4. Grandparent directory (e.g. .../cats/images/1.jpg)
-        gp_map = {p: os.path.basename(os.path.dirname(os.path.dirname(p))).strip() for p in raw_images}
-        non_generic_gps = set(gp_map.values()) - generic_names - split_names
-        if len(non_generic_gps) >= 2:
-            itms = [(p, gp_map[p]) for p in raw_images]
-            cls_dict = {}
-            for _, l in itms:
-                cls_dict[l] = cls_dict.get(l, 0) + 1
-            return itms, cls_dict
-
-        # Fallback
-        itms = [(p, parent_map[p] if parent_map[p] not in generic_names else "general") for p in raw_images]
-        cls_dict = {}
-        for _, l in itms:
-            cls_dict[l] = cls_dict.get(l, 0) + 1
-        return itms, cls_dict
+                    st.success(f"✅ Successfully ingested **{filename}** (Saved untouched in `data/raw/`).")
+            except Exception as load_err:
+                st.error(f"❌ Failed to parse '{filename}': {str(load_err)}")
 
     with ingest_tab2:
         folder_mode = st.radio(
@@ -1474,19 +1519,21 @@ elif st.session_state.active_module == "eda":
             with s_c3:
                 if num_cols:
                     slicer_num = st.selectbox("📏 Numeric Range Slicer:", num_cols, key="pbi_slicer_num")
-                    min_val = float(active_df[slicer_num].min())
-                    max_val = float(active_df[slicer_num].max())
-                    if min_val < max_val:
-                        selected_range = st.slider(
-                            f"Filter Range for {slicer_num}:",
-                            min_value=min_val,
-                            max_value=max_val,
-                            value=(min_val, max_val),
-                            key="pbi_slider_num",
-                        )
-                        filtered_df = filtered_df[
-                            (filtered_df[slicer_num] >= selected_range[0]) & (filtered_df[slicer_num] <= selected_range[1])
-                        ]
+                    valid_vals = active_df[slicer_num].dropna()
+                    if not valid_vals.empty:
+                        min_val = float(valid_vals.min())
+                        max_val = float(valid_vals.max())
+                        if min_val < max_val:
+                            selected_range = st.slider(
+                                f"Filter Range for {slicer_num}:",
+                                min_value=min_val,
+                                max_value=max_val,
+                                value=(min_val, max_val),
+                                key="pbi_slider_num",
+                            )
+                            filtered_df = filtered_df[
+                                (filtered_df[slicer_num] >= selected_range[0]) & (filtered_df[slicer_num] <= selected_range[1])
+                            ]
 
             with s_c4:
                 search_q = st.text_input("🔎 Search Text Slicer:", placeholder="Filter keyword...", key="pbi_search_box")
@@ -2678,8 +2725,22 @@ elif st.session_state.active_module == "chat":
                             answer_text = ans_pack["answer"]
                         else:
                             gen_code = llm_res["code"]
-                            exec_res = execute_safe_query(gen_code, active_df)
-                            answer_text = f"Result of `{prompt}` using `{llm_res['model_used']}`:"
+                            try:
+                                exec_res = execute_safe_query(gen_code, active_df)
+                                if exec_res.get("error"):
+                                    st.warning(f"⚠️ Sandboxed execution note: {exec_res['error']}. Falling back to analytical heuristic engine.")
+                                    ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
+                                    gen_code = ans_pack["code"]
+                                    exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
+                                    answer_text = ans_pack["answer"]
+                                else:
+                                    answer_text = f"Result of `{prompt}` using `{llm_res.get('model_used', 'Groq')}`:"
+                            except Exception as query_exc:
+                                st.warning(f"⚠️ AST Sandboxed query handler note: {str(query_exc)}. Running fallback analyst.")
+                                ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
+                                gen_code = ans_pack["code"]
+                                exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
+                                answer_text = ans_pack["answer"]
                     else:
                         ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
                         gen_code = ans_pack["code"]
