@@ -109,29 +109,59 @@ def generate_groq_pandas_code(
         "total_rows": len(df),
     }
 
-    system_prompt = f"""You are an elite Principal Data Scientist & Python Programmer.
-You have access to a clean pandas DataFrame named `df`.
+    system_prompt = f"""You are an expert Python Data Analyst and Core Engine for the DataFlow AI framework. Your primary role is to convert user natural language questions into accurate, executable Python/Pandas code.
+
 Dataset Schema & Metadata:
 - Columns: {schema_info['columns']}
 - Data Types: {schema_info['dtypes']}
 - Total Rows: {schema_info['total_rows']:,}
 - Sample Head Records: {schema_info['sample_rows']}
 
-Strict Code Generation Guidelines:
-1. Return ONLY pure, valid, executable Python code. Never include markdown formatting, backticks (```), or narrative prose.
-2. Only use pandas (`pd`), numpy (`np`), or plotly.express (`px`). Do not import any other libraries.
-3. ALWAYS assign the final analytical outcome to a variable named `result`.
-4. Output types for `result`:
-   - Tabular aggregations, subsets, or grouped metrics: assign a pandas DataFrame or Series.
-   - Visualizations: assign a Plotly Express figure (`result = px.bar(...)`, `px.scatter(...)`, `px.pie(...)`, etc.). Apply clean styling.
-   - Single numerical or text metrics: assign a scalar (number or string).
-5. Robustness & Safe Execution:
-   - Only reference columns that explicitly exist in the provided schema.
+==================================================
+STRICT CODE GENERATION & AST RULES
+==================================================
+1. Output ONLY valid, executable Python code.
+2. Assign your final output to a variable named `result`.
+3. DO NOT output markdown code blocks (NO ```python or ```), conversational text, introductory statements, or explanations outside the code.
+4. The dataset is already loaded into a pandas DataFrame named `df`.
+5. SECURITY & SANDBOX CONSTRAINTS: Use strictly standard Pandas (`df`), NumPy (`np`), or built-in Python string operations. Do NOT use file I/O, OS operations, imports, system calls, or external APIs.
+6. Target Output Types:
+   - Tabular aggregations, subsets, or grouped metrics: assign a pandas DataFrame or Series to `result`.
+   - Visualizations: assign a Plotly Express figure (`result = px.bar(...)`, `px.scatter(...)`, `px.pie(...)`, etc.) to `result`.
+   - Single numerical or text metrics: assign a scalar (number or string) to `result`.
+
+==================================================
+AMBIGUOUS, TYPO-RIDDLED & VAGUE QUERY HANDLING
+==================================================
+1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "help", "summary", "tell me about this data", "overview"):
+   - NEVER return: result = "This question cannot be answered from the dataset's available columns."
+   - INSTEAD, generate a comprehensive statistical summary formatted cleanly in markdown:
+     result = (
+         f"### 📊 Automated Dataset Summary\n\n"
+         f"- **Total Rows:** {{len(df):,}}\n"
+         f"- **Total Columns:** {{len(df.columns)}}\n\n"
+         f"**Columns:** {{', '.join(df.columns.tolist())}}\n\n"
+         f"**Statistical Breakdown:**\n" + df.describe(include='all').T.fillna('-').to_markdown()
+     )
+
+2. TYPOS IN INTENT OR COLUMN NAMES (e.g., "daste" -> "dataset", "outliers", "infomation"):
+   - Infer the user's intent from the closest semantic match.
+   - For outlier queries (e.g., "how many outliers present in this daste"):
+     Calculate IQR-based outliers across numeric columns rather than falling back to `df.head(5)`:
+     num_cols = df.select_dtypes(include=['number']).columns
+     q1 = df[num_cols].quantile(0.25)
+     q3 = df[num_cols].quantile(0.75)
+     iqr = q3 - q1
+     outliers = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum()
+     result = "### ⚠️ Outlier Count per Numeric Feature\n\n" + outliers.to_frame('Outlier Count').to_markdown()
+
+3. COLUMN-SPECIFIC METRICS:
+   - Match requested features flexibility against standard lowercase, underscored, or exact dataset column names.
+   - For quantitative questions (mean, max, sum, counts), perform explicit vector aggregations.
    - Handle missing/NaN values gracefully (e.g. `.dropna()` before calculating mean/median).
    - If numeric conversion is needed, use `pd.to_numeric(df['col'], errors='coerce')`.
-   - If the user query is outside the available dataset features, assign:
-     result = "This question cannot be answered from the dataset's available columns."
-6. Preferred output language: {language}.
+
+User preferred output language: {language}.
 """
 
     client = Groq(api_key=api_key)
@@ -268,6 +298,43 @@ def offline_fallback_analyst(query: str, df: pd.DataFrame, language: str = "Engl
     Guarantees that questions receive real, accurate, and computed answers even offline!
     """
     q = query.lower()
+
+    # 0. Outliers queries (including typo tolerance: "outlier", "outliers", "daste", "விலகல்")
+    if any(k in q for k in ["outlier", "outliers", "outliar", "விலகல்"]) or ("daste" in q and "outlier" in q):
+        num_cols = df.select_dtypes(include=['number']).columns
+        if len(num_cols) > 0:
+            q1 = df[num_cols].quantile(0.25)
+            q3 = df[num_cols].quantile(0.75)
+            iqr = q3 - q1
+            outliers = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum()
+            md_table = outliers.to_frame('Outlier Count').to_markdown()
+            res_text = f"### ⚠️ Outlier Count per Numeric Feature\n\n{md_table}"
+            code = """num_cols = df.select_dtypes(include=['number']).columns
+q1 = df[num_cols].quantile(0.25)
+q3 = df[num_cols].quantile(0.75)
+iqr = q3 - q1
+outliers = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum()
+result = "### ⚠️ Outlier Count per Numeric Feature\n\n" + outliers.to_frame('Outlier Count').to_markdown()"""
+            return {"answer": res_text, "result": res_text, "code": code, "type": "scalar"}
+
+    # 0b. Vague or General Enquiries (explain, help, summary, tell me about, overview, etc.)
+    if any(k in q for k in ["explain", "help", "tell me about", "overview", "விளக்கு", "சுருக்கம்", "about this data", "describe"]):
+        summary_md = df.describe(include='all').T.fillna('-').to_markdown()
+        res_text = (
+            f"### 📊 Automated Dataset Summary\n\n"
+            f"- **Total Rows:** {len(df):,}\n"
+            f"- **Total Columns:** {len(df.columns)}\n\n"
+            f"**Columns:** {', '.join(df.columns.tolist())}\n\n"
+            f"**Statistical Breakdown:**\n{summary_md}"
+        )
+        code = """result = (
+    f"### 📊 Automated Dataset Summary\n\n"
+    f"- **Total Rows:** {len(df):,}\n"
+    f"- **Total Columns:** {len(df.columns)}\n\n"
+    f"**Columns:** {', '.join(df.columns.tolist())}\n\n"
+    f"**Statistical Breakdown:**\n" + df.describe(include='all').T.fillna('-').to_markdown()
+)"""
+        return {"answer": res_text, "result": res_text, "code": code, "type": "scalar"}
     
     # 1. Survival rate / Survived queries (Titanic specific or binary targets)
     if any(k in q for k in ["surviv", "தப்பித்", "alive", "death", "mortality"]):
