@@ -14,6 +14,8 @@ plotly>=5.18.0
 
 # Machine Learning & Pipelines
 scikit-learn>=1.3.0
+scipy>=1.10.0
+joblib>=1.3.0
 
 # Generative AI & LLM Integration (Groq & Gemini)
 groq>=0.9.0

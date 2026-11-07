@@ -6,7 +6,14 @@ Universal Ingestion | Auto-Cleaning | Power BI Dashboard | AutoML | Groq Voice C
 Main Application Entry Point (app.py)
 """
 
+import sys
 import os
+
+# Guarantee root workspace directory is at head of sys.path for robust modular imports
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import re
 import zipfile
 from typing import Tuple, Dict, Any, List, Optional, Union
@@ -54,12 +61,46 @@ from src.splitter import (
     split_image_dataset,
     create_split_distribution_chart,
 )
-from src.automl import (
-    infer_task_type,
-    train_tabular_models,
-    predict_tabular_sample,
-    predict_tabular_sample_detailed,
-)
+try:
+    from src.automl import (
+        infer_task_type,
+        train_tabular_models,
+        predict_tabular_sample,
+        predict_tabular_sample_detailed,
+    )
+except ImportError:
+    # Resilience for Streamlit Cloud hot-reload / in-memory module caching
+    import importlib
+    if "src.automl" in sys.modules:
+        try:
+            importlib.reload(sys.modules["src.automl"])
+        except Exception:
+            pass
+    try:
+        from src.automl import (
+            infer_task_type,
+            train_tabular_models,
+            predict_tabular_sample,
+            predict_tabular_sample_detailed,
+        )
+    except ImportError:
+        from src.automl import (
+            infer_task_type,
+            train_tabular_models,
+            predict_tabular_sample,
+        )
+        def predict_tabular_sample_detailed(
+            pipeline, input_dict, target_col=None, task_type="classification"
+        ):
+            pred = predict_tabular_sample(pipeline, input_dict)
+            return {
+                "raw_prediction": pred,
+                "prediction": pred,
+                "label_display": str(pred),
+                "confidence": None,
+                "probabilities": {},
+                "is_classification": (task_type == "classification"),
+            }
 from src.image_trainer import (
     train_mobilenet_v2,
     predict_single_image,

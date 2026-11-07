@@ -54,6 +54,15 @@ import plotly.figure_factory as ff
 
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
 
+__all__ = [
+    "infer_task_type",
+    "build_preprocessor",
+    "train_tabular_models",
+    "predict_tabular_sample",
+    "predict_tabular_sample_detailed",
+    "MODELS_DIR",
+]
+
 
 def infer_task_type(series: pd.Series) -> str:
     """
