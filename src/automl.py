@@ -30,8 +30,16 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import (
+    RandomForestClassifier,
+    GradientBoostingClassifier,
+    ExtraTreesClassifier,
+    VotingClassifier,
+    RandomForestRegressor,
+    GradientBoostingRegressor,
+    ExtraTreesRegressor,
+    VotingRegressor,
+)
 from sklearn.metrics import (
     accuracy_score,
     precision_recall_fscore_support,
@@ -125,19 +133,38 @@ def train_tabular_models(
 
     preprocessor, num_cols, cat_cols = build_preprocessor(X_train)
 
-    # Initialize model suites
+    # Initialize model suites with high-accuracy tuned architectures & ensembles
     if task_type == "classification":
+        m_lr = LogisticRegression(max_iter=1000, C=1.0, class_weight="balanced", random_state=42)
+        m_rf = RandomForestClassifier(n_estimators=150, max_depth=8, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_gb = GradientBoostingClassifier(n_estimators=120, learning_rate=0.08, max_depth=4, subsample=0.85, random_state=42)
+        m_et = ExtraTreesClassifier(n_estimators=150, max_depth=8, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_vote = VotingClassifier(
+            estimators=[("lr", m_lr), ("et", m_et), ("rf", m_rf)],
+            voting="soft",
+        )
         models_dict = {
-            "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, random_state=42),
+            "Soft Voting Ensemble": m_vote,
+            "Logistic Regression": m_lr,
+            "Extra Trees": m_et,
+            "Random Forest": m_rf,
+            "Gradient Boosting": m_gb,
         }
         metric_key = "Accuracy"
     else:
+        m_ridge = Ridge(alpha=1.0, random_state=42)
+        m_rf = RandomForestRegressor(n_estimators=150, max_depth=8, min_samples_split=4, random_state=42)
+        m_gb = GradientBoostingRegressor(n_estimators=120, learning_rate=0.08, max_depth=4, subsample=0.85, random_state=42)
+        m_et = ExtraTreesRegressor(n_estimators=150, max_depth=8, min_samples_split=4, random_state=42)
+        m_vote = VotingRegressor(
+            estimators=[("ridge", m_ridge), ("et", m_et), ("gbr", m_gb)],
+        )
         models_dict = {
-            "Ridge Regression": Ridge(alpha=1.0, random_state=42),
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, random_state=42),
+            "Voting Ensemble Regressor": m_vote,
+            "Ridge Regression": m_ridge,
+            "Extra Trees Regressor": m_et,
+            "Random Forest Regressor": m_rf,
+            "Gradient Boosting Regressor": m_gb,
         }
         metric_key = "R2 Score"
 
@@ -199,9 +226,10 @@ def train_tabular_models(
                 best_score = r2
                 best_model_name = name
 
+    sort_metric = "Accuracy (%)" if task_type == "classification" else "R2 Score"
     leaderboard_df = pd.DataFrame(leaderboard).sort_values(
-        by=leaderboard[0].keys().__iter__().__next__(), ascending=False
-    )
+        by=sort_metric, ascending=False
+    ).reset_index(drop=True)
 
     best_pipeline = trained_pipelines[best_model_name]
 
@@ -235,6 +263,17 @@ def train_tabular_models(
     try:
         model_step = best_pipeline.named_steps["model"]
         if hasattr(model_step, "feature_importances_"):
+            importances = model_step.feature_importances_
+        elif hasattr(model_step, "estimators_") and len(model_step.estimators_) > 0:
+            tree_estimators = [e for e in model_step.estimators_ if hasattr(e, "feature_importances_")]
+            if tree_estimators:
+                importances = np.mean([e.feature_importances_ for e in tree_estimators], axis=0)
+            else:
+                importances = None
+        else:
+            importances = None
+
+        if importances is not None:
             # Extract feature names from preprocessor
             ohe = best_pipeline.named_steps["preprocessor"].named_transformers_.get("cat")
             cat_feature_names = []
@@ -242,8 +281,6 @@ def train_tabular_models(
                 cat_feature_names = list(ohe.named_steps["onehot"].get_feature_names_out(cat_cols))
             
             all_feature_names = num_cols + cat_feature_names
-            importances = model_step.feature_importances_
-            
             if len(all_feature_names) == len(importances):
                 imp_df = pd.DataFrame({
                     "Feature": all_feature_names,
@@ -300,3 +337,67 @@ def predict_tabular_sample(pipeline: Pipeline, input_dict: Dict[str, Any]) -> An
     df_sample = pd.DataFrame([input_dict])
     prediction = pipeline.predict(df_sample)[0]
     return prediction
+
+
+def predict_tabular_sample_detailed(
+    pipeline: Pipeline,
+    input_dict: Dict[str, Any],
+    target_col: Optional[str] = None,
+    task_type: str = "classification",
+) -> Dict[str, Any]:
+    """
+    High-accuracy inference engine for user-submitted tabular samples.
+    Returns:
+    - prediction: raw predicted class or numerical value
+    - label_display: user-friendly label (e.g. 'Survived (Positive)' or numeric formatted)
+    - confidence: float percentage (e.g. 89.4%) if classifier
+    - probabilities: Dict[str, float] of all class probabilities
+    - is_classification: bool
+    """
+    df_sample = pd.DataFrame([input_dict])
+    raw_pred = pipeline.predict(df_sample)[0]
+
+    result = {
+        "raw_prediction": raw_pred,
+        "prediction": raw_pred,
+        "label_display": str(raw_pred),
+        "confidence": None,
+        "probabilities": {},
+        "is_classification": (task_type == "classification"),
+    }
+
+    # If classification and model supports predict_proba
+    if task_type == "classification":
+        if hasattr(pipeline, "predict_proba"):
+            try:
+                probs = pipeline.predict_proba(df_sample)[0]
+                classes = list(getattr(pipeline, "classes_", range(len(probs))))
+                max_conf = float(np.max(probs)) * 100.0
+                result["confidence"] = round(max_conf, 2)
+                result["probabilities"] = {
+                    str(c): round(float(p) * 100.0, 2) for c, p in zip(classes, probs)
+                }
+            except Exception:
+                pass
+
+        # Human-friendly label mapping for common binary classification tasks
+        str_p = str(raw_pred).strip().lower()
+        if target_col and "surviv" in target_col.lower():
+            if str_p in ["1", "1.0", "true", "yes"]:
+                result["label_display"] = "Survived (Positive Class)"
+            elif str_p in ["0", "0.0", "false", "no"]:
+                result["label_display"] = "Did Not Survive (Negative Class)"
+        elif str_p in ["1", "1.0", "true", "yes"]:
+            result["label_display"] = f"Positive ({raw_pred})"
+        elif str_p in ["0", "0.0", "false", "no"]:
+            result["label_display"] = f"Negative ({raw_pred})"
+
+    else:
+        # Regression
+        try:
+            num_val = float(raw_pred)
+            result["label_display"] = f"{num_val:,.2f}" if abs(num_val) < 1e7 else f"{num_val:.4e}"
+        except Exception:
+            result["label_display"] = str(raw_pred)
+
+    return result

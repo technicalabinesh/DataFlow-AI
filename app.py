@@ -17,6 +17,7 @@ from datetime import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 from PIL import Image
 from dotenv import load_dotenv
 
@@ -57,6 +58,7 @@ from src.automl import (
     infer_task_type,
     train_tabular_models,
     predict_tabular_sample,
+    predict_tabular_sample_detailed,
 )
 from src.image_trainer import (
     train_mobilenet_v2,
@@ -698,9 +700,15 @@ with hero_left:
         <div style="font-size: 2.5rem; font-weight: 900; color: #000000; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 10px;">
             Seamless <span style="text-decoration: underline; text-decoration-color: #8b5cf6;">Data</span> Journey ⤳
         </div>
-        <div style="font-size: 1.22rem; color: #1e293b; font-weight: 700; line-height: 1.55; margin-bottom: 22px; max-width: 620px;">
+        <div style="font-size: 1.22rem; color: #1e293b; font-weight: 800; line-height: 1.5; margin-bottom: 8px; max-width: 660px;">
             Universal AI Data Analyst: Autonomous Cleaning, Power BI Dashboard, AutoML Leaderboards, 
             and Multilingual Voice & Text Chatbot in English & Tamil.
+        </div>
+        <div style="font-size: 0.92rem; color: #334155; font-weight: 600; line-height: 1.55; margin-bottom: 20px; max-width: 660px; background: #f8fafc; border-left: 4px solid #8b5cf6; padding: 10px 14px; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 0px rgba(0,0,0,0.06);">
+            ✦ <b>Enterprise Multi-Modal Intelligence Engine:</b> Featuring Zero-Leakage Train/Val/Test Splitting, 
+            Automated Type Imputation & Outlier Mitigation, Dynamic Power BI Visual Slicers, High-Accuracy Ensembles (Soft Voting & Extra Trees), 
+            Deep Computer Vision (MobileNetV2 Transfer Learning & Real-Time Inference), Sentiment NLP, 
+            Harmonic Time-Series Forecasting, and Multilingual Conversational Voice Copilot with Whisper STT & LLaMA 3.3.
         </div>
         """
     )
@@ -1976,16 +1984,68 @@ elif st.session_state.active_module == "automl":
                                 input_data[c] = st.selectbox(f"{c}", opts)
                     
                     if st.form_submit_button("⚡ Predict"):
-                        pred_val = predict_tabular_sample(res["best_pipeline"], input_data)
+                        det = predict_tabular_sample_detailed(
+                            res["best_pipeline"],
+                            input_data,
+                            target_col=res.get("target_col"),
+                            task_type=res.get("task_type", "classification"),
+                        )
+                        pred_val = det["prediction"]
+                        label_disp = det["label_display"]
+                        conf = det["confidence"]
+                        best_m_name = res.get("best_model_name", "Best Model")
+
+                        conf_badge = f'<span class="neo-badge badge-lime" style="font-size: 0.82rem; margin-left: 8px;">🎯 {conf}% CONFIDENCE</span>' if conf is not None else ""
+
                         st.markdown(
                             f"""
-                            <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 20px; margin-top: 10px;">
-                                <div style="color: #000; font-size: 0.9rem; font-weight: 800; text-transform: uppercase;">Prediction Output:</div>
-                                <div style="color: #000; font-size: 2.2rem; font-weight: 900;">{pred_val}</div>
+                            <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 20px; margin-top: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                                    <span style="color: #000; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
+                                        🏆 Benchmark Winner: {best_m_name}
+                                    </span>
+                                    {conf_badge}
+                                </div>
+                                <div style="color: #000; font-size: 0.80rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">High-Accuracy Output:</div>
+                                <div style="color: #000; font-size: 2.2rem; font-weight: 900; line-height: 1.2; margin-top: 4px;">{label_disp}</div>
+                                <div style="color: #334155; font-size: 0.82rem; font-weight: 600; margin-top: 6px;">Raw Target Value: <code>{pred_val}</code></div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
+
+                        if det.get("probabilities") and len(det["probabilities"]) > 1:
+                            st.markdown("<div style='margin-top: 14px; font-weight: 800; font-size: 0.92rem; color: #000;'>📊 Model Probability Distribution Across Classes:</div>", unsafe_allow_html=True)
+                            prob_rows = [
+                                {"Class": str(k), "Probability (%)": v}
+                                for k, v in det["probabilities"].items()
+                            ]
+                            prob_df = pd.DataFrame(prob_rows).sort_values(by="Probability (%)", ascending=True)
+                            fig_p = px.bar(
+                                prob_df,
+                                x="Probability (%)",
+                                y="Class",
+                                orientation="h",
+                                text="Probability (%)",
+                                color="Probability (%)",
+                                color_continuous_scale="Purples",
+                            )
+                            fig_p.update_layout(
+                                height=190,
+                                margin=dict(l=20, r=20, t=10, b=20),
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                xaxis=dict(range=[0, 100], showgrid=True, gridcolor="#e2e8f0"),
+                                yaxis=dict(type='category', showgrid=False),
+                                coloraxis_showscale=False,
+                            )
+                            fig_p.update_traces(
+                                texttemplate='%{text:.1f}%',
+                                textposition='outside',
+                                marker_line_color='#000',
+                                marker_line_width=1.5
+                            )
+                            st.plotly_chart(fig_p, use_container_width=True)
 
     # -------------------------------------------------------------
     # SUITE 2: COMPUTER VISION AUTOML (INSTANT & DEEP LEARNING)

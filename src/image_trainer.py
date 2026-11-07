@@ -60,9 +60,12 @@ class UniversalImageDataset(Dataset):
 
 
 def get_image_transforms(img_size: int = 224) -> Tuple[transforms.Compose, transforms.Compose]:
-    """Returns training transforms (with augmentation) and validation/test transforms."""
+    """Returns training transforms (with augmentation) and validation/test transforms with aspect-preserving crop for maximum accuracy."""
+    expanded_size = max(img_size + 32, int(img_size * 1.14))
+
     train_transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        transforms.Resize(expanded_size),
+        transforms.RandomResizedCrop(img_size, scale=(0.85, 1.0)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(degrees=15),
         transforms.ColorJitter(brightness=0.1, contrast=0.1),
@@ -71,7 +74,8 @@ def get_image_transforms(img_size: int = 224) -> Tuple[transforms.Compose, trans
     ])
 
     eval_transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        transforms.Resize(expanded_size),
+        transforms.CenterCrop(img_size),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
