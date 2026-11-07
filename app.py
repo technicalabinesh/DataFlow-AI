@@ -32,6 +32,7 @@ import io
 import json
 import time
 from datetime import datetime
+import textwrap
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -145,11 +146,13 @@ from src.genai_engine import (
     generate_executive_narrative,
 )
 from src.chatbot import (
+    generate_gemini_pandas_code,
     generate_groq_pandas_code,
     execute_safe_query,
     transcribe_audio_groq,
     generate_tts_audio,
     offline_fallback_analyst,
+    SUPPORTED_GEMINI_MODELS,
     SUPPORTED_GROQ_MODELS,
     WHISPER_MODELS,
 )
@@ -652,6 +655,9 @@ def init_session():
         "ml_target": None,
         "ml_results": None,
         "chat_history": [],
+        "ai_provider": "Google Gemini (Free Tier)" if os.getenv("GEMINI_API_KEY") else ("Groq LPU (Ultra-Fast)" if os.getenv("GROQ_API_KEY") else "Google Gemini (Free Tier)"),
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+        "selected_gemini_model": "gemini-2.5-flash",
         "groq_api_key": os.getenv("GROQ_API_KEY", ""),
         "selected_groq_model": "qwen/qwen3.8-27b",
         "selected_whisper_model": "whisper-large-v3-turbo",
@@ -790,7 +796,15 @@ with col_nav6:
         st.rerun()
 
 with col_badge:
-    if st.session_state.groq_api_key:
+    if st.session_state.get("gemini_api_key"):
+        st.html(
+            """
+            <div style="text-align: right; padding-top: 5px;">
+                <span class="neo-badge badge-purple">✨ GEMINI CONNECTED</span>
+            </div>
+            """
+        )
+    elif st.session_state.get("groq_api_key"):
         st.html(
             """
             <div style="text-align: right; padding-top: 5px;">
@@ -2276,7 +2290,7 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
             target_col = st.selectbox("Select Target Feature to Predict:", available_cols, index=target_idx, key="automl_target_select")
             st.session_state.ml_target = target_col
             task_type = infer_task_type(active_df[target_col])
-            st.markdown(f"**Inferred Task Type**: `<span class='neo-badge badge-lime'>{task_type.upper()}</span>`", unsafe_allow_html=True)
+            st.markdown(f"**Inferred Task Type**: <span class='neo-badge badge-lime'>{task_type.upper()}</span>", unsafe_allow_html=True)
 
             if st.session_state.tabular_splits is None:
                 train_df, val_df, test_df, s_rep = split_tabular_data(active_df, target_col=target_col)
@@ -2363,22 +2377,20 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
 
                         conf_badge = f'<span class="neo-badge badge-lime" style="font-size: 0.82rem; margin-left: 8px;">🎯 {conf}% CONFIDENCE</span>' if conf is not None else ""
 
-                        st.markdown(
-                            f"""
-                            <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 20px; margin-top: 14px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
-                                    <span style="color: #000; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
-                                        🏆 Benchmark Winner: {best_m_name}
-                                    </span>
-                                    {conf_badge}
-                                </div>
-                                <div style="color: #000; font-size: 0.80rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">High-Accuracy Output:</div>
-                                <div style="color: #000; font-size: 2.2rem; font-weight: 900; line-height: 1.2; margin-top: 4px;">{label_disp}</div>
-                                <div style="color: #334155; font-size: 0.82rem; font-weight: 600; margin-top: 6px;">Raw Target Value: <code>{pred_val}</code></div>
+                        pred_card_html = f"""
+                        <div style="background: #bef264; border: 2.5px solid #000; border-radius: 16px; box-shadow: 4px 4px 0px #000; padding: 20px; margin-top: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                                <span style="color: #000; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    🏆 Benchmark Winner: {best_m_name}
+                                </span>
+                                {conf_badge}
                             </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                            <div style="color: #000; font-size: 0.80rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">High-Accuracy Output:</div>
+                            <div style="color: #000; font-size: 2.2rem; font-weight: 900; line-height: 1.2; margin-top: 4px;">{label_disp}</div>
+                            <div style="color: #334155; font-size: 0.82rem; font-weight: 600; margin-top: 6px;">Raw Target Value: <code>{pred_val}</code></div>
+                        </div>
+                        """
+                        st.markdown(textwrap.dedent(pred_card_html).strip(), unsafe_allow_html=True)
 
                         if det.get("probabilities") and len(det["probabilities"]) > 1:
                             st.markdown("<div style='margin-top: 14px; font-weight: 800; font-size: 0.92rem; color: #000;'>📊 Model Probability Distribution Across Classes:</div>", unsafe_allow_html=True)
@@ -2920,7 +2932,7 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
                         clf = res_nlp["classifier"]
                         st.markdown("---")
                         st.markdown(f"#### 🎯 Trained Text Classifier (`{res_nlp['text_col']}` ➔ `{sel_label_col}`)")
-                        st.markdown(f"**Cross-Validation Score**: `<span class='neo-badge badge-lime'>{clf['cv_score']}%</span>`", unsafe_allow_html=True)
+                        st.markdown(f"**Cross-Validation Score**: <span class='neo-badge badge-lime'>{clf['cv_score']}%</span>", unsafe_allow_html=True)
 
                         test_query = st.text_input("Test Trained Classifier with Live Phrase:", placeholder="Type a test phrase...", key="test_nlp_clf_input")
                         if test_query:
@@ -3207,13 +3219,52 @@ elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module
         st.warning("Please upload a dataset or select a sample first.")
     else:
         # Settings Bar for Chatbot
-        c_mod1, c_mod2, c_mod3 = st.columns([1.5, 1.5, 1])
-        with c_mod1:
-            st.session_state.groq_api_key = st.text_input("Groq API Key (Optional):", value=st.session_state.groq_api_key, type="password", placeholder="gsk_...")
-        with c_mod2:
-            st.session_state.selected_groq_model = st.selectbox("Groq Model:", SUPPORTED_GROQ_MODELS, index=0)
-        with c_mod3:
+        p_c1, p_c2 = st.columns([2.5, 1.5])
+        with p_c1:
+            prov_opts = ["🌟 Google Gemini (Free & Powerful)", "⚡ Groq LPU (Ultra-Fast)", "💻 Offline Analytical Engine"]
+            p_idx = 0
+            if "Groq" in str(st.session_state.get("ai_provider", "")):
+                p_idx = 1
+            elif "Offline" in str(st.session_state.get("ai_provider", "")):
+                p_idx = 2
+            st.session_state.ai_provider = st.radio("AI Provider Engine:", prov_opts, index=p_idx, horizontal=True)
+        with p_c2:
             st.session_state.language = st.selectbox("Language / மொழி:", ["English", "தமிழ் (Tamil)"], index=0 if st.session_state.language == "English" else 1)
+
+        c_mod1, c_mod2 = st.columns([2, 1.5])
+        if "Gemini" in st.session_state.ai_provider:
+            with c_mod1:
+                st.session_state.gemini_api_key = st.text_input(
+                    "Google Gemini API Key:",
+                    value=st.session_state.get("gemini_api_key", ""),
+                    type="password",
+                    placeholder="AIzaSy...",
+                    help="Free API key from aistudio.google.com"
+                )
+            with c_mod2:
+                g_idx = 0
+                if st.session_state.get("selected_gemini_model") in SUPPORTED_GEMINI_MODELS:
+                    g_idx = SUPPORTED_GEMINI_MODELS.index(st.session_state.selected_gemini_model)
+                st.session_state.selected_gemini_model = st.selectbox("Gemini Model:", SUPPORTED_GEMINI_MODELS, index=g_idx)
+        elif "Groq" in st.session_state.ai_provider:
+            with c_mod1:
+                st.session_state.groq_api_key = st.text_input(
+                    "Groq API Key:",
+                    value=st.session_state.get("groq_api_key", ""),
+                    type="password",
+                    placeholder="gsk_...",
+                    help="Free API key from console.groq.com"
+                )
+            with c_mod2:
+                gr_idx = 0
+                if st.session_state.get("selected_groq_model") in SUPPORTED_GROQ_MODELS:
+                    gr_idx = SUPPORTED_GROQ_MODELS.index(st.session_state.selected_groq_model)
+                st.session_state.selected_groq_model = st.selectbox("Groq Model:", SUPPORTED_GROQ_MODELS, index=gr_idx)
+        else:
+            with c_mod1:
+                st.info("💻 Running fully local rule-based heuristic analytics engine. Zero API key required.")
+            with c_mod2:
+                st.caption("Deterministic mathematical & statistical calculation.")
 
         # Voice Input Mic Row (Only for asking questions)
         voice_c1, voice_c2 = st.columns([1.2, 2.8])
@@ -3307,7 +3358,18 @@ elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module
 
             with st.chat_message("assistant"):
                 with st.spinner("AI analyzing question & generating query execution..."):
-                    if st.session_state.groq_api_key:
+                    llm_res = None
+                    # Route 1: Google Gemini (Preferred Free-Tier & Powerful)
+                    if "Gemini" in st.session_state.ai_provider and st.session_state.get("gemini_api_key"):
+                        llm_res = generate_gemini_pandas_code(
+                            prompt,
+                            active_df,
+                            api_key=st.session_state.gemini_api_key,
+                            model_name=st.session_state.selected_gemini_model,
+                            language=st.session_state.language,
+                        )
+                    # Route 2: Groq LPU
+                    elif "Groq" in st.session_state.ai_provider and st.session_state.get("groq_api_key"):
                         llm_res = generate_groq_pandas_code(
                             prompt,
                             active_df,
@@ -3315,31 +3377,29 @@ elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module
                             model_name=st.session_state.selected_groq_model,
                             language=st.session_state.language,
                         )
-                        if llm_res.get("error"):
-                            st.caption(f"Note: {llm_res['error']}. Using local analytical engine.")
-                            ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
-                            gen_code = ans_pack["code"]
-                            exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
-                            answer_text = ans_pack["answer"]
-                        else:
-                            gen_code = llm_res["code"]
-                            try:
-                                exec_res = execute_safe_query(gen_code, active_df)
-                                if exec_res.get("error"):
-                                    st.warning(f"⚠️ Sandboxed execution note: {exec_res['error']}. Falling back to analytical heuristic engine.")
-                                    ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
-                                    gen_code = ans_pack["code"]
-                                    exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
-                                    answer_text = ans_pack["answer"]
-                                else:
-                                    answer_text = f"Result of `{prompt}` using `{llm_res.get('model_used', 'Groq')}`:"
-                            except Exception as query_exc:
-                                st.warning(f"⚠️ AST Sandboxed query handler note: {str(query_exc)}. Running fallback analyst.")
+
+                    # Route 3: Execution of generated code or graceful fallback
+                    if llm_res and not llm_res.get("error"):
+                        gen_code = llm_res["code"]
+                        try:
+                            exec_res = execute_safe_query(gen_code, active_df)
+                            if exec_res.get("error"):
+                                st.caption(f"⚠️ Sandboxed query execution: {exec_res['error']}. Running analytical heuristic engine.")
                                 ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
                                 gen_code = ans_pack["code"]
                                 exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
                                 answer_text = ans_pack["answer"]
+                            else:
+                                answer_text = f"Analyzed `{prompt}` via **{llm_res.get('model_used', 'AI')}**:"
+                        except Exception as query_exc:
+                            st.caption(f"⚠️ Query execution note: {str(query_exc)}. Running fallback analyst.")
+                            ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
+                            gen_code = ans_pack["code"]
+                            exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}
+                            answer_text = ans_pack["answer"]
                     else:
+                        if llm_res and llm_res.get("error"):
+                            st.caption(f"AI Provider note: {llm_res['error']}. Running local analytical engine.")
                         ans_pack = offline_fallback_analyst(prompt, active_df, st.session_state.language)
                         gen_code = ans_pack["code"]
                         exec_res = {"result": ans_pack["result"], "type": ans_pack["type"], "error": None}

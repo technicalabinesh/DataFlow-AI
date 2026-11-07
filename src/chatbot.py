@@ -32,6 +32,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 from gtts import gTTS
 
+# Try importing Google Generative AI (Gemini)
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 # Try importing Groq
 try:
     from groq import Groq
@@ -39,6 +46,16 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
+
+SUPPORTED_GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemma-2-27b-it",
+    "gemma-2-9b-it",
+]
 
 SUPPORTED_GROQ_MODELS = [
     "qwen/qwen3.8-27b",
@@ -86,6 +103,130 @@ def check_code_safety(code: str) -> Tuple[bool, str]:
         return False, f"Syntax parsing failed: {str(e)}"
 
     return True, "Safe"
+
+
+def safe_df_to_markdown(df: pd.DataFrame) -> str:
+    """
+    Safely converts a DataFrame to a markdown formatted table without crashing if tabulate is missing.
+    """
+    try:
+        return df.to_markdown()
+    except Exception:
+        cols = [str(c) for c in df.columns]
+        header = "| " + " | ".join(cols) + " |"
+        sep = "| " + " | ".join("---" for _ in cols) + " |"
+        rows = []
+        for _, r in df.iterrows():
+            rows.append("| " + " | ".join(str(v) for v in r.values) + " |")
+        return "\n".join([header, sep] + rows)
+
+
+def generate_gemini_pandas_code(
+    query: str,
+    df: pd.DataFrame,
+    api_key: str,
+    model_name: str = "gemini-2.5-flash",
+    language: str = "English",
+) -> Dict[str, Any]:
+    """
+    Sends dataset schema + user question to Google Gemini to generate pandas data manipulation code.
+    """
+    if not GEMINI_AVAILABLE or not api_key:
+        return {"error": "Google Gemini SDK not installed or GEMINI_API_KEY missing."}
+
+    # Normalize model identifier (strip 'models/' prefix if user supplied it)
+    clean_model_name = model_name.replace("models/", "").strip()
+
+    schema_info = {
+        "columns": list(df.columns),
+        "dtypes": {c: str(t) for c, t in df.dtypes.items()},
+        "sample_rows": df.head(3).to_dict(orient="records"),
+        "total_rows": len(df),
+    }
+
+    system_prompt = f"""You are an expert Python Data Analyst and Core Engine for the DataFlow AI framework. Your primary role is to convert user natural language questions into accurate, executable Python/Pandas code.
+
+Dataset Schema & Metadata:
+- Columns: {schema_info['columns']}
+- Data Types: {schema_info['dtypes']}
+- Total Rows: {schema_info['total_rows']:,}
+- Sample Head Records: {schema_info['sample_rows']}
+
+==================================================
+STRICT CODE GENERATION & AST RULES
+==================================================
+1. Output ONLY valid, executable Python code.
+2. Assign your final output to a variable named `result`.
+3. DO NOT output markdown code blocks (NO ```python or ```), conversational text, introductory statements, or explanations outside the code.
+4. The dataset is already loaded into a pandas DataFrame named `df`.
+5. SECURITY & SANDBOX CONSTRAINTS: Use strictly standard Pandas (`df`), NumPy (`np`), or built-in Python string operations. Do NOT use file I/O, OS operations, imports, system calls, or external APIs.
+6. Target Output Types:
+   - Tabular aggregations, subsets, or grouped metrics: assign a pandas DataFrame or Series to `result`.
+   - Visualizations: assign a Plotly Express figure (`result = px.bar(...)`, `px.scatter(...)`, `px.pie(...)`, etc.) to `result`.
+   - Single numerical or text metrics: assign a scalar (number or string) to `result`.
+
+==================================================
+AMBIGUOUS, TYPO-RIDDLED & VAGUE QUERY HANDLING
+==================================================
+1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "expalain", "help", "summary", "tell me about this data", "overview", "what is this"):
+   - NEVER return: result = "This question cannot be answered from the dataset's available columns."
+   - INSTEAD, generate a comprehensive statistical summary formatted cleanly in markdown:
+     result = (
+         f"### 📊 Automated Dataset Summary\\n\\n"
+         f"- **Total Rows:** {{len(df):,}}\\n"
+         f"- **Total Columns:** {{len(df.columns)}}\\n\\n"
+         f"**Columns:** {{', '.join(df.columns.tolist())}}\\n\\n"
+         f"**Statistical Breakdown:**\\n" + df.describe(include='all').T.fillna('-').to_string()
+     )
+
+2. TYPOS IN INTENT OR COLUMN NAMES (e.g., "daste" -> "dataset", "expalain" -> "explain", "outliers", "infomation"):
+   - Infer the user's intent from the closest semantic match.
+   - For outlier queries, calculate IQR-based outliers across numeric columns:
+     num_cols = df.select_dtypes(include=['number']).columns
+     q1 = df[num_cols].quantile(0.25)
+     q3 = df[num_cols].quantile(0.75)
+     iqr = q3 - q1
+     result = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum().to_frame('Outlier Count')
+
+User preferred output language: {language}.
+"""
+
+    try:
+        genai.configure(api_key=api_key)
+        
+        # Try requested model, then standard reliable fallbacks
+        models_to_try = [clean_model_name, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        unique_models = []
+        for m in models_to_try:
+            if m not in unique_models:
+                unique_models.append(m)
+
+        last_err = None
+        for m in unique_models:
+            try:
+                model = genai.GenerativeModel(m)
+                full_prompt = f"{system_prompt}\n\nUser Question: {query}\n\nReturn ONLY the executable Python code assigning output to `result`:"
+                response = model.generate_content(full_prompt)
+                raw_code = response.text.strip()
+                
+                # Clean markdown backticks if model generated them
+                clean_code = re.sub(r"^```python\s*", "", raw_code, flags=re.MULTILINE)
+                clean_code = re.sub(r"^```\s*", "", clean_code, flags=re.MULTILINE)
+                clean_code = clean_code.strip()
+
+                return {
+                    "code": clean_code,
+                    "model_used": f"Google Gemini ({m})",
+                    "error": None,
+                }
+            except Exception as e:
+                last_err = str(e)
+                continue
+
+        return {"error": f"Google Gemini API failed: {last_err}"}
+
+    except Exception as e:
+        return {"error": f"Gemini initialization error: {str(e)}"}
 
 
 def generate_groq_pandas_code(
@@ -294,7 +435,7 @@ def generate_tts_audio(text: str, lang: str = "en") -> Optional[bytes]:
 
 def offline_fallback_analyst(query: str, df: pd.DataFrame, language: str = "English") -> Dict[str, Any]:
     """
-    Intelligent rule-based data query responder when Groq API key is not configured.
+    Intelligent rule-based data query responder when cloud LLM API is not configured or offline.
     Guarantees that questions receive real, accurate, and computed answers even offline!
     """
     q = query.lower()
@@ -307,34 +448,53 @@ def offline_fallback_analyst(query: str, df: pd.DataFrame, language: str = "Engl
             q3 = df[num_cols].quantile(0.75)
             iqr = q3 - q1
             outliers = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum()
-            md_table = outliers.to_frame('Outlier Count').to_markdown()
+            out_df = outliers.to_frame('Outlier Count')
+            md_table = safe_df_to_markdown(out_df)
             res_text = f"### ⚠️ Outlier Count per Numeric Feature\n\n{md_table}"
             code = """num_cols = df.select_dtypes(include=['number']).columns
 q1 = df[num_cols].quantile(0.25)
 q3 = df[num_cols].quantile(0.75)
 iqr = q3 - q1
 outliers = ((df[num_cols] < (q1 - 1.5 * iqr)) | (df[num_cols] > (q3 + 1.5 * iqr))).sum()
-result = "### ⚠️ Outlier Count per Numeric Feature\n\n" + outliers.to_frame('Outlier Count').to_markdown()"""
-            return {"answer": res_text, "result": res_text, "code": code, "type": "scalar"}
+result = outliers.to_frame('Outlier Count')"""
+            return {"answer": res_text, "result": out_df, "code": code, "type": "dataframe"}
 
-    # 0b. Vague or General Enquiries (explain, help, summary, tell me about, overview, etc.)
-    if any(k in q for k in ["explain", "help", "tell me about", "overview", "விளக்கு", "சுருக்கம்", "about this data", "describe"]):
-        summary_md = df.describe(include='all').T.fillna('-').to_markdown()
+    # 0b. Vague or General Enquiries (explain, expalain, help, summary, tell me about, overview, etc.)
+    is_explain = any(k in q for k in [
+        "explain", "expalain", "explian", "explan", "summary", "summarize",
+        "overview", "describe", "detail", "about the data", "about the dataset",
+        "about this data", "about this dataset", "விளக்கு", "சுருக்கம்", "about data"
+    ]) or (any(a in q for a in ["about", "info", "what is", "tell me"]) and any(d in q for d in ["dataset", "daset", "data", "detaset", "file", "table"]))
+
+    if is_explain:
+        num_cols = list(df.select_dtypes(include=['number']).columns)
+        cat_cols = list(df.select_dtypes(exclude=['number']).columns)
+        missing_count = int(df.isnull().sum().sum())
+        rows_cnt = len(df)
+        cols_cnt = len(df.columns)
+
+        stat_sample = df.describe(include='all').T.fillna('-')
+        stat_table = safe_df_to_markdown(stat_sample.head(10))
+
         res_text = (
-            f"### 📊 Automated Dataset Summary\n\n"
-            f"- **Total Rows:** {len(df):,}\n"
-            f"- **Total Columns:** {len(df.columns)}\n\n"
-            f"**Columns:** {', '.join(df.columns.tolist())}\n\n"
-            f"**Statistical Breakdown:**\n{summary_md}"
+            f"### 📊 Comprehensive Dataset Profile & Overview\n\n"
+            f"- **Dataset Scale:** **{rows_cnt:,} rows** × **{cols_cnt} columns**\n"
+            f"- **Numeric Attributes ({len(num_cols)}):** {', '.join(f'`{c}`' for c in num_cols[:6])}{'...' if len(num_cols) > 6 else ''}\n"
+            f"- **Categorical Attributes ({len(cat_cols)}):** {', '.join(f'`{c}`' for c in cat_cols[:6])}{'...' if len(cat_cols) > 6 else ''}\n"
+            f"- **Data Completeness:** {'100% Complete (0 missing values)' if missing_count == 0 else f'{missing_count:,} missing values detected'}\n"
+            f"- **Duplicate Records:** {int(df.duplicated().sum()):,} rows\n\n"
+            f"**Feature Statistical Summary (Top 10):**\n\n"
+            f"{stat_table}"
         )
-        code = """result = (
-    f"### 📊 Automated Dataset Summary\n\n"
-    f"- **Total Rows:** {len(df):,}\n"
-    f"- **Total Columns:** {len(df.columns)}\n\n"
-    f"**Columns:** {', '.join(df.columns.tolist())}\n\n"
-    f"**Statistical Breakdown:**\n" + df.describe(include='all').T.fillna('-').to_markdown()
-)"""
-        return {"answer": res_text, "result": res_text, "code": code, "type": "scalar"}
+        summary_df = pd.DataFrame({
+            'Metric': ['Total Rows', 'Total Columns', 'Missing Values', 'Duplicates', 'Numeric Columns', 'Categorical Columns'],
+            'Value': [rows_cnt, cols_cnt, missing_count, int(df.duplicated().sum()), len(num_cols), len(cat_cols)]
+        })
+        code = """result = pd.DataFrame({
+    'Metric': ['Total Rows', 'Total Columns', 'Missing Values', 'Duplicates', 'Numeric Columns', 'Categorical Columns'],
+    'Value': [len(df), len(df.columns), df.isnull().sum().sum(), df.duplicated().sum(), len(df.select_dtypes(include=['number']).columns), len(df.select_dtypes(exclude=['number']).columns)]
+})"""
+        return {"answer": res_text, "result": summary_df, "code": code, "type": "dataframe"}
     
     # 1. Survival rate / Survived queries (Titanic specific or binary targets)
     if any(k in q for k in ["surviv", "தப்பித்", "alive", "death", "mortality"]):
