@@ -11,6 +11,7 @@ Features:
 6. Power BI Custom Visual Studio (User-configurable X, Y, Legend, and Chart types).
 """
 
+import re
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 import numpy as np
@@ -370,5 +371,139 @@ def generate_powerbi_gauge(value: float, min_val: float, max_val: float, title: 
         margin=dict(l=20, r=20, t=40, b=20),
     )
     return fig
+
+
+def generate_text_to_plotly_chart(
+    prompt: str,
+    df: pd.DataFrame,
+    api_key: Optional[str] = None,
+) -> Tuple[Optional[go.Figure], str]:
+    """
+    Natural Language Chart Studio (Text-to-Plotly).
+    Interprets natural language chart requests into styled Plotly figures.
+    Uses Groq LLM when available, with a smart semantic keyword parser as offline fallback.
+    """
+    p_lower = prompt.lower().strip()
+    numeric_cols = list(df.select_dtypes(include=["number"]).columns)
+    cat_cols = [c for c in df.columns if c not in numeric_cols]
+    fig = None
+    explanation = ""
+
+    # Strategy 1: Attempt LLM execution if API key is present
+    if api_key:
+        try:
+            from groq import Groq
+            client = Groq(api_key=api_key)
+            system_msg = (
+                "You are an expert Python data visualization engineer. Given a pandas DataFrame `df`, "
+                "write ONLY executable Python code using `plotly.express` (as `px`) or `plotly.graph_objects` (as `go`) "
+                "to create the exact requested chart. Assign your completed figure to a variable named `fig`. "
+                "Do NOT use markdown code blocks or backticks. Do NOT import libraries or perform file I/O."
+            )
+            user_msg = (
+                f"DataFrame columns: {df.columns.tolist()}\n"
+                f"Data types: {df.dtypes.to_dict()}\n"
+                f"User Request: {prompt}\n"
+                f"Write the Python snippet that assigns `fig = ...`"
+            )
+            chat_resp = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.1,
+                max_tokens=600,
+            )
+            raw_code = chat_resp.choices[0].message.content.strip()
+            raw_code = re.sub(r"^```python\s*", "", raw_code)
+            raw_code = re.sub(r"^```\s*", "", raw_code)
+            raw_code = re.sub(r"```$", "", raw_code).strip()
+
+            local_scope = {"df": df, "px": px, "go": go, "pd": pd, "np": np}
+            exec(raw_code, {}, local_scope)
+            if "fig" in local_scope and isinstance(local_scope["fig"], go.Figure):
+                fig = local_scope["fig"]
+                explanation = f"Generated visual using Groq LLM: {prompt}"
+        except Exception:
+            fig = None
+
+    # Strategy 2: Offline Semantic Visual Parser Fallback
+    if fig is None:
+        # Match candidate columns mentioned in prompt
+        matched_cols = []
+        for c in df.columns:
+            pattern = r"\b" + re.escape(c.lower()) + r"\b"
+            if re.search(pattern, p_lower):
+                matched_cols.append(c)
+
+        # Detect desired chart family
+        is_scatter = any(k in p_lower for k in ["scatter", "correlation", "versus", "vs", "relationship"])
+        is_line = any(k in p_lower for k in ["line", "trend", "over time", "timeline", "temporal"])
+        is_box = any(k in p_lower for k in ["box", "boxplot", "quantile", "spread", "distribution"])
+        is_pie = any(k in p_lower for k in ["pie", "donut", "share", "percentage", "proportion"])
+        is_hist = any(k in p_lower for k in ["histogram", "freq", "frequency", "density"])
+        is_stacked = "stack" in p_lower
+
+        # Identify axes
+        num_matches = [c for c in matched_cols if c in numeric_cols]
+        cat_matches = [c for c in matched_cols if c in cat_cols]
+
+        x_col = cat_matches[0] if cat_matches else (cat_cols[0] if cat_cols else (numeric_cols[0] if numeric_cols else None))
+        y_col = num_matches[0] if num_matches else (numeric_cols[0] if numeric_cols else None)
+        color_col = cat_matches[1] if len(cat_matches) > 1 else None
+
+        if is_scatter and len(num_matches) >= 2:
+            x_col = num_matches[0]
+            y_col = num_matches[1]
+            fig = px.scatter(df, x=x_col, y=y_col, color=color_col, title=f"Scatter Analysis: {y_col} vs. {x_col}")
+            explanation = f"Generated Scatter Plot of {y_col} vs. {x_col}"
+        elif is_line and x_col and y_col:
+            fig = px.line(df, x=x_col, y=y_col, color=color_col, title=f"Trend Analysis: {y_col} along {x_col}")
+            explanation = f"Generated Line Chart of {y_col} over {x_col}"
+        elif is_box and y_col:
+            fig = px.box(df, x=x_col, y=y_col, color=color_col, title=f"Boxplot Distribution: {y_col} by {x_col}")
+            explanation = f"Generated Boxplot of {y_col} grouped by {x_col}"
+        elif is_pie and x_col:
+            val_col = y_col if y_col else None
+            is_donut = "donut" in p_lower
+            fig = px.pie(df, names=x_col, values=val_col, hole=0.45 if is_donut else 0, title=f"Proportional Breakdown: {x_col}")
+            explanation = f"Generated {'Donut' if is_donut else 'Pie'} Chart of {x_col}"
+        elif is_hist and y_col:
+            fig = px.histogram(df, x=y_col, color=color_col, nbins=30, title=f"Frequency Histogram: {y_col}")
+            explanation = f"Generated Histogram of {y_col}"
+        else:
+            # Default to styled Bar chart
+            if x_col and y_col:
+                barmode = "relative" if is_stacked else "group"
+                fig = px.bar(
+                    df.head(100),
+                    x=x_col,
+                    y=y_col,
+                    color=color_col if color_col else x_col,
+                    barmode=barmode,
+                    title=f"{'Stacked ' if is_stacked else ''}Bar Chart: {y_col} by {x_col}",
+                )
+                explanation = f"Generated {'Stacked ' if is_stacked else ''}Bar Chart of {y_col} grouped by {x_col}"
+            elif x_col:
+                fig = px.bar(
+                    df[x_col].value_counts().reset_index().head(20),
+                    x="index",
+                    y=x_col,
+                    title=f"Category Distribution: {x_col}",
+                )
+                explanation = f"Generated Category Bar Chart for {x_col}"
+
+    if fig is not None:
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(15, 23, 42, 0.5)",
+            plot_bgcolor="rgba(15, 23, 42, 0.5)",
+            height=420,
+            margin=dict(t=50, b=40, l=40, r=40),
+        )
+
+    return fig, explanation
+
 
 

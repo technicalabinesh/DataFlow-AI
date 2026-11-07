@@ -146,6 +146,14 @@ from src.reporter import (
     generate_pdf_report,
     generate_word_report,
     generate_json_session_export,
+    generate_powerpoint_presentation,
+)
+from src.xai_engine import (
+    compute_model_interpretability,
+    generate_data_quality_profile,
+)
+from src.eda import (
+    generate_text_to_plotly_chart,
 )
 from src.samples import ensure_sample_datasets
 
@@ -637,6 +645,7 @@ def init_session():
         "selected_groq_model": "qwen/qwen3.8-27b",
         "selected_whisper_model": "whisper-large-v3-turbo",
         "active_tab": "Ingest",
+        "workspace_datasets": {},
         "active_module": "ingest",
         "df": None,
         "active_automl_subtab": "tabular",  # 'ingest', 'clean', 'eda', 'automl', 'chat', 'report'
@@ -697,7 +706,6 @@ with col_logo:
             </div>
             <div>
                 <span style="font-weight: 900; font-size: 1.25rem; color: #000; letter-spacing: -0.02em;">DataFlow</span>
-                <span class="neo-badge badge-purple" style="font-size: 0.65rem; padding: 2px 8px; margin-left: 4px;">Power BI</span>
             </div>
         </div>
         """
@@ -746,16 +754,16 @@ with col_nav6:
         st.rerun()
 
 with col_badge:
-    engine_status = "⚡ GROQ ENGINE ACTIVE" if st.session_state.groq_api_key else "⚡ LOCAL AI ACTIVE"
-    badge_bg = "badge-lime" if st.session_state.groq_api_key else "badge-yellow"
-    st.html(
-        f"""
-        <div style="text-align: right; padding-top: 5px;">
-            <span class="neo-badge {badge_bg}">{engine_status}</span>
-            <span class="neo-badge badge-dark">ADMIN: Viva</span>
-        </div>
-        """
-    )
+    if st.session_state.groq_api_key:
+        st.html(
+            """
+            <div style="text-align: right; padding-top: 5px;">
+                <span class="neo-badge badge-lime">⚡ GROQ CONNECTED</span>
+            </div>
+            """
+        )
+    else:
+        st.html("<div></div>")
 
 st.html("<hr style='border: 1.5px solid #000; margin-top: 8px; margin-bottom: 24px;'>")
 
@@ -1021,7 +1029,7 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
     render_hero_blueprint_and_milestones()
     st.markdown("### 📁 Universal Ingestion & Auto-Split Engine")
     
-    ingest_tab1, ingest_tab2 = st.tabs(["📄 Single File Ingestion", "📂 Folder & ZIP Auto-Detect"])
+    ingest_tab1, ingest_tab2, ingest_tab3 = st.tabs(["📄 Single File Ingestion", "📂 Folder & ZIP Auto-Detect", "🔗 Multi-Dataset SQL Joins & Workspace"])
 
     with ingest_tab1:
         uploaded_file = st.file_uploader(
@@ -1057,6 +1065,9 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
                     save_raw_file(file_bytes, filename)
                     st.session_state.raw_df = df
                     st.session_state.cleaned_df = df.copy()
+                    if "workspace_datasets" not in st.session_state:
+                        st.session_state.workspace_datasets = {}
+                    st.session_state.workspace_datasets[filename] = df
                     st.session_state.raw_filename = filename
                     st.session_state.dataset_type = "tabular"
                     st.session_state.tabular_splits = None
@@ -1254,6 +1265,85 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
                             st.session_state.raw_filename = f"Combined_{len(scan_res['tables'])}_Tables"
                             st.session_state.dataset_type = "tabular"
                             st.rerun()
+
+    with ingest_tab3:
+        st.markdown("#### 🔗 Multi-Dataset Workspace & SQL-Style Join Studio")
+        st.caption("Upload multiple relational tables (e.g., Orders + Customers, Transactions + Products) and perform visual SQL-style Inner, Left, Right, or Full Outer joins before analysis.")
+
+        multi_files = st.file_uploader(
+            "Upload multiple tables into Workspace (CSV, Excel, Parquet):",
+            type=["csv", "tsv", "xlsx", "xls", "json", "parquet"],
+            accept_multiple_files=True,
+            key="multi_file_workspace_uploader",
+        )
+        if multi_files:
+            for uf in multi_files:
+                if uf.name not in st.session_state.workspace_datasets:
+                    try:
+                        m_df, _ = cached_load_tabular_from_bytes(uf.getvalue(), uf.name)
+                        st.session_state.workspace_datasets[uf.name] = m_df
+                        st.toast(f"Added {uf.name} ({len(m_df)} rows) to Workspace", icon="📁")
+                    except Exception as e:
+                        st.error(f"Error loading {uf.name}: {e}")
+
+        ws = st.session_state.get("workspace_datasets", {})
+        if len(ws) < 2:
+            st.info("💡 To perform a SQL join, at least 2 datasets must be loaded in the workspace. Upload additional files above or click below to load a sample relational pair:")
+            if st.button("⚡ Load Demo Relational Pair (Titanic Manifest + Cabin Services)", key="btn_load_demo_pair"):
+                t_df = pd.read_csv(SAMPLE_PATHS["titanic"])
+                n_cab = min(len(t_df), 200)
+                cabins_df = pd.DataFrame({
+                    "PassengerId": t_df["PassengerId"].sample(n=n_cab, random_state=42).values,
+                    "Deck_Code": np.random.choice(["Deck-A", "Deck-B", "Deck-C", "Deck-D"], size=n_cab),
+                    "VIP_Lounge_Access": np.random.choice(["Yes", "No", "Standard"], size=n_cab),
+                    "Meal_Service": np.random.choice(["Full Catering", "Buffet", "Continental"], size=n_cab),
+                })
+                ws["titanic_manifest.csv"] = t_df
+                ws["cabin_services.csv"] = cabins_df
+                st.session_state.workspace_datasets = ws
+                st.success("Loaded 'titanic_manifest.csv' and 'cabin_services.csv' into workspace!")
+                st.rerun()
+
+        if len(ws) >= 2:
+            st.markdown(f"**Loaded Tables in Workspace ({len(ws)}):**")
+            ws_summary = [f"• `{name}`: {len(df_item):,} rows × {len(df_item.columns)} columns" for name, df_item in ws.items()]
+            st.markdown("\n".join(ws_summary))
+
+            c_j1, c_j2, c_j3 = st.columns([1.5, 1.5, 1.2])
+            with c_j1:
+                table_a_name = st.selectbox("Select Left Table (Table A):", list(ws.keys()), index=0, key="join_tbl_a")
+                df_a = ws[table_a_name]
+                key_a = st.selectbox(f"Primary Key ({table_a_name}):", df_a.columns.tolist(), key="join_key_a")
+            with c_j2:
+                avail_b = [k for k in ws.keys() if k != table_a_name]
+                table_b_name = st.selectbox("Select Right Table (Table B):", avail_b, index=0 if avail_b else 0, key="join_tbl_b")
+                df_b = ws[table_b_name]
+                def_b_idx = list(df_b.columns).index(key_a) if key_a in df_b.columns else 0
+                key_b = st.selectbox(f"Foreign Key ({table_b_name}):", df_b.columns.tolist(), index=def_b_idx, key="join_key_b")
+            with c_j3:
+                join_type_label = st.selectbox(
+                    "SQL Join Type:",
+                    ["Inner Join (Intersection)", "Left Outer Join (All Left)", "Right Outer Join (All Right)", "Full Outer Join (Union)"],
+                    key="join_type_sel"
+                )
+                join_how = "inner" if "Inner" in join_type_label else ("left" if "Left" in join_type_label else ("right" if "Right" in join_type_label else "outer"))
+
+            if st.button("⚡ Execute SQL Join & Set as Active Working Dataset", width="stretch", key="btn_exec_join"):
+                try:
+                    merged = pd.merge(df_a, df_b, left_on=key_a, right_on=key_b, how=join_how, suffixes=("_A", "_B"))
+                    st.session_state.raw_df = merged
+                    st.session_state.cleaned_df = merged.copy()
+                    st.session_state.df = merged
+                    st.session_state.raw_filename = f"joined_{table_a_name.split('.')[0]}_{table_b_name.split('.')[0]}.csv"
+                    st.session_state.dataset_type = "tabular"
+                    st.session_state.tabular_splits = None
+                    st.session_state.ml_results = None
+                    st.success(f"🎉 Successfully merged `{table_a_name}` and `{table_b_name}` via `{join_type_label}`!")
+                    st.info(f"Resulting Dataset: **{len(merged):,} rows** × **{len(merged.columns)} columns**")
+                    st.dataframe(merged.head(10), width="stretch")
+                    st.rerun()
+                except Exception as join_err:
+                    st.error(f"SQL Join execution error: {str(join_err)}")
 
     # Data Profiling & Split (Tabular)
     if st.session_state.dataset_type == "tabular" and st.session_state.raw_df is not None:
@@ -1571,259 +1661,394 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
         cat_cols = list(active_df.select_dtypes(exclude=["number"]).columns)
         num_cols = list(active_df.select_dtypes(include=["number"]).columns)
 
-        # 1. POWER BI INTERACTIVE SLICERS RIBBON
-        with st.expander("🔍 Power BI Slicers & Dynamic Cross-Filtering Ribbon", expanded=True):
-            s_c1, s_c2, s_c3, s_c4 = st.columns([1.5, 1.5, 1.8, 1.2])
-            filtered_df = active_df.copy()
+        eda_subtab1, eda_subtab2, eda_subtab3 = st.tabs([
+            "📊 Executive BI Dashboard & Slicers",
+            "🎨 Natural Language Chart Studio (Text-to-Plotly)",
+            "📈 Time-Series Predictive Forecasting",
+        ])
 
-            with s_c1:
-                if cat_cols:
-                    slicer_cat1 = st.selectbox("📌 Primary Segment Slicer:", cat_cols, key="pbi_slicer_cat1")
-                    unique_vals1 = list(active_df[slicer_cat1].dropna().unique())
-                    chosen_vals1 = st.multiselect(
-                        f"Filter {slicer_cat1}:",
-                        options=unique_vals1,
-                        default=unique_vals1[:min(len(unique_vals1), 5)],
-                        key="pbi_slicer_vals1",
-                    )
-                    if chosen_vals1:
-                        filtered_df = filtered_df[filtered_df[slicer_cat1].isin(chosen_vals1)]
+        with eda_subtab1:
+            # 1. POWER BI INTERACTIVE SLICERS RIBBON
+            with st.expander("🔍 Power BI Slicers & Dynamic Cross-Filtering Ribbon", expanded=True):
+                s_c1, s_c2, s_c3, s_c4 = st.columns([1.5, 1.5, 1.8, 1.2])
+                filtered_df = active_df.copy()
 
-            with s_c2:
-                if len(cat_cols) > 1:
-                    slicer_cat2 = st.selectbox("📌 Secondary Segment Slicer:", cat_cols, index=1, key="pbi_slicer_cat2")
-                    unique_vals2 = list(active_df[slicer_cat2].dropna().unique())
-                    chosen_vals2 = st.multiselect(
-                        f"Filter {slicer_cat2}:",
-                        options=unique_vals2,
-                        default=unique_vals2,
-                        key="pbi_slicer_vals2",
-                    )
-                    if chosen_vals2:
-                        filtered_df = filtered_df[filtered_df[slicer_cat2].isin(chosen_vals2)]
-                elif num_cols:
-                    st.caption("Only 1 categorical column detected in dataset.")
+                with s_c1:
+                    if cat_cols:
+                        slicer_cat1 = st.selectbox("📌 Primary Segment Slicer:", cat_cols, key="pbi_slicer_cat1")
+                        unique_vals1 = list(active_df[slicer_cat1].dropna().unique())
+                        chosen_vals1 = st.multiselect(
+                            f"Filter {slicer_cat1}:",
+                            options=unique_vals1,
+                            default=unique_vals1[:min(len(unique_vals1), 5)],
+                            key="pbi_slicer_vals1",
+                        )
+                        if chosen_vals1:
+                            filtered_df = filtered_df[filtered_df[slicer_cat1].isin(chosen_vals1)]
 
-            with s_c3:
+                with s_c2:
+                    if len(cat_cols) > 1:
+                        slicer_cat2 = st.selectbox("📌 Secondary Segment Slicer:", cat_cols, index=1, key="pbi_slicer_cat2")
+                        unique_vals2 = list(active_df[slicer_cat2].dropna().unique())
+                        chosen_vals2 = st.multiselect(
+                            f"Filter {slicer_cat2}:",
+                            options=unique_vals2,
+                            default=unique_vals2,
+                            key="pbi_slicer_vals2",
+                        )
+                        if chosen_vals2:
+                            filtered_df = filtered_df[filtered_df[slicer_cat2].isin(chosen_vals2)]
+                    elif num_cols:
+                        st.caption("Only 1 categorical column detected in dataset.")
+
+                with s_c3:
+                    if num_cols:
+                        slicer_num = st.selectbox("📏 Numeric Range Slicer:", num_cols, key="pbi_slicer_num")
+                        valid_vals = active_df[slicer_num].dropna()
+                        if not valid_vals.empty:
+                            min_val = float(valid_vals.min())
+                            max_val = float(valid_vals.max())
+                            if min_val < max_val:
+                                selected_range = st.slider(
+                                    f"Filter Range for {slicer_num}:",
+                                    min_value=min_val,
+                                    max_value=max_val,
+                                    value=(min_val, max_val),
+                                    key="pbi_slider_num",
+                                )
+                                filtered_df = filtered_df[
+                                    (filtered_df[slicer_num] >= selected_range[0]) & (filtered_df[slicer_num] <= selected_range[1])
+                                ]
+
+                with s_c4:
+                    search_q = st.text_input("🔎 Search Text Slicer:", placeholder="Filter keyword...", key="pbi_search_box")
+                    if search_q:
+                        mask = filtered_df.astype(str).apply(lambda row: row.str.contains(search_q, case=False).any(), axis=1)
+                        filtered_df = filtered_df[mask]
+
+                    if st.button("🔄 Reset Slicers", key="reset_slicers_btn", width="stretch"):
+                        filtered_df = active_df.copy()
+                        st.rerun()
+
+                filter_pct = (len(filtered_df) / max(len(active_df), 1)) * 100
+                st.markdown(
+                    f"""
+                    <div style="background: #0078D4; color: #ffffff; padding: 6px 14px; border-radius: 8px; font-weight: 800; font-size: 0.82rem; margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;">
+                        <span>⚡ Power BI Cross-Filtering Active:</span>
+                        <span>Showing <b>{len(filtered_df):,}</b> of <b>{len(active_df):,}</b> records (<b>{filter_pct:.1f}%</b> of total)</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # 2. POWER BI KPI SCORECARD ROW (5-CARD MULTI-ROW)
+            st.markdown("##### 📌 Power BI Executive KPI Cards")
+            k_c1, k_c2, k_c3, k_c4, k_c5 = st.columns(5)
+
+            with k_c1:
+                st.markdown(
+                    f"""
+                    <div class="pbi-scorecard">
+                        <div class="pbi-scorecard-label">Active Volume</div>
+                        <div class="pbi-scorecard-num">{len(filtered_df):,}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            with k_c2:
                 if num_cols:
-                    slicer_num = st.selectbox("📏 Numeric Range Slicer:", num_cols, key="pbi_slicer_num")
-                    valid_vals = active_df[slicer_num].dropna()
-                    if not valid_vals.empty:
-                        min_val = float(valid_vals.min())
-                        max_val = float(valid_vals.max())
-                        if min_val < max_val:
-                            selected_range = st.slider(
-                                f"Filter Range for {slicer_num}:",
-                                min_value=min_val,
-                                max_value=max_val,
-                                value=(min_val, max_val),
-                                key="pbi_slider_num",
-                            )
-                            filtered_df = filtered_df[
-                                (filtered_df[slicer_num] >= selected_range[0]) & (filtered_df[slicer_num] <= selected_range[1])
-                            ]
+                    p_metric = num_cols[0]
+                    total_sum = filtered_df[p_metric].sum() if not filtered_df.empty else 0
+                    sum_formatted = f"{total_sum:,.1f}" if abs(total_sum) < 1000000 else f"{total_sum/1000000:.2f}M"
+                    st.markdown(
+                        f"""
+                        <div class="pbi-scorecard">
+                            <div class="pbi-scorecard-label">Total {p_metric}</div>
+                            <div class="pbi-scorecard-num" style="color: #0078D4;">{sum_formatted}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"""
+                        <div class="pbi-scorecard">
+                            <div class="pbi-scorecard-label">Features</div>
+                            <div class="pbi-scorecard-num">{len(filtered_df.columns)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-            with s_c4:
-                search_q = st.text_input("🔎 Search Text Slicer:", placeholder="Filter keyword...", key="pbi_search_box")
-                if search_q:
-                    mask = filtered_df.astype(str).apply(lambda row: row.str.contains(search_q, case=False).any(), axis=1)
-                    filtered_df = filtered_df[mask]
+            with k_c3:
+                if num_cols:
+                    p_metric = num_cols[0]
+                    avg_val = round(filtered_df[p_metric].mean(), 2) if not filtered_df.empty else 0
+                    st.markdown(
+                        f"""
+                        <div class="pbi-scorecard">
+                            <div class="pbi-scorecard-label">Average {p_metric}</div>
+                            <div class="pbi-scorecard-num" style="color: #107C41;">{avg_val}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"""
+                        <div class="pbi-scorecard">
+                            <div class="pbi-scorecard-label">Data Types</div>
+                            <div class="pbi-scorecard-num">{filtered_df.dtypes.nunique()}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                if st.button("🔄 Reset Slicers", key="reset_slicers_btn", width="stretch"):
-                    filtered_df = active_df.copy()
-                    st.rerun()
-
-            filter_pct = (len(filtered_df) / max(len(active_df), 1)) * 100
-            st.markdown(
-                f"""
-                <div style="background: #0078D4; color: #ffffff; padding: 6px 14px; border-radius: 8px; font-weight: 800; font-size: 0.82rem; margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;">
-                    <span>⚡ Power BI Cross-Filtering Active:</span>
-                    <span>Showing <b>{len(filtered_df):,}</b> of <b>{len(active_df):,}</b> records (<b>{filter_pct:.1f}%</b> of total)</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        # 2. POWER BI KPI SCORECARD ROW (5-CARD MULTI-ROW)
-        st.markdown("##### 📌 Power BI Executive KPI Cards")
-        k_c1, k_c2, k_c3, k_c4, k_c5 = st.columns(5)
-
-        with k_c1:
-            st.markdown(
-                f"""
-                <div class="pbi-scorecard">
-                    <div class="pbi-scorecard-label">Active Volume</div>
-                    <div class="pbi-scorecard-num">{len(filtered_df):,}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with k_c2:
-            if num_cols:
-                p_metric = num_cols[0]
-                total_sum = filtered_df[p_metric].sum() if not filtered_df.empty else 0
-                sum_formatted = f"{total_sum:,.1f}" if abs(total_sum) < 1000000 else f"{total_sum/1000000:.2f}M"
+            with k_c4:
+                p_cat = cat_cols[0] if cat_cols else "Columns"
+                distinct_cnt = filtered_df[p_cat].nunique() if cat_cols else len(filtered_df.columns)
                 st.markdown(
                     f"""
                     <div class="pbi-scorecard">
-                        <div class="pbi-scorecard-label">Total {p_metric}</div>
-                        <div class="pbi-scorecard-num" style="color: #0078D4;">{sum_formatted}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f"""
-                    <div class="pbi-scorecard">
-                        <div class="pbi-scorecard-label">Features</div>
-                        <div class="pbi-scorecard-num">{len(filtered_df.columns)}</div>
+                        <div class="pbi-scorecard-label">Distinct {p_cat}</div>
+                        <div class="pbi-scorecard-num" style="color: #5C2D91;">{distinct_cnt}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-        with k_c3:
-            if num_cols:
-                p_metric = num_cols[0]
-                avg_val = round(filtered_df[p_metric].mean(), 2) if not filtered_df.empty else 0
+            with k_c5:
+                completeness = round(100 - (filtered_df.isnull().sum().sum() / max(filtered_df.size, 1) * 100), 1)
+                comp_color = "#107C41" if completeness >= 95 else "#D83B01"
                 st.markdown(
                     f"""
                     <div class="pbi-scorecard">
-                        <div class="pbi-scorecard-label">Average {p_metric}</div>
-                        <div class="pbi-scorecard-num" style="color: #107C41;">{avg_val}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f"""
-                    <div class="pbi-scorecard">
-                        <div class="pbi-scorecard-label">Data Types</div>
-                        <div class="pbi-scorecard-num">{filtered_df.dtypes.nunique()}</div>
+                        <div class="pbi-scorecard-label">Data Quality</div>
+                        <div class="pbi-scorecard-num" style="color: {comp_color};">{completeness}%</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-        with k_c4:
-            p_cat = cat_cols[0] if cat_cols else "Columns"
-            distinct_cnt = filtered_df[p_cat].nunique() if cat_cols else len(filtered_df.columns)
-            st.markdown(
-                f"""
-                <div class="pbi-scorecard">
-                    <div class="pbi-scorecard-label">Distinct {p_cat}</div>
-                    <div class="pbi-scorecard-num" style="color: #5C2D91;">{distinct_cnt}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with k_c5:
-            completeness = round(100 - (filtered_df.isnull().sum().sum() / max(filtered_df.size, 1) * 100), 1)
-            comp_color = "#107C41" if completeness >= 95 else "#D83B01"
-            st.markdown(
-                f"""
-                <div class="pbi-scorecard">
-                    <div class="pbi-scorecard-label">Data Quality</div>
-                    <div class="pbi-scorecard-num" style="color: {comp_color};">{completeness}%</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        # 3. POWER BI VISUAL DECOMPOSITION GRID
-        st.markdown("---")
-        st.markdown("##### 📈 Power BI Visual Decomposition Grid")
-
-        v_row1_col1, v_row1_col2 = st.columns(2)
-        with v_row1_col1:
-            if cat_cols:
-                donut_target = cat_cols[0]
-                fig_donut, ins_donut = generate_powerbi_donut(filtered_df, donut_target)
-                st.plotly_chart(fig_donut, width="stretch")
-                st.info(ins_donut)
-            else:
-                st.caption("No categorical feature available for Donut visual.")
-
-        with v_row1_col2:
-            if cat_cols:
-                bar_cat = cat_cols[min(len(cat_cols)-1, 1)]
-                bar_num = num_cols[0] if num_cols else None
-                fig_bar, ins_bar = generate_powerbi_clustered_bar(filtered_df, bar_cat, bar_num)
-                st.plotly_chart(fig_bar, width="stretch")
-                st.info(ins_bar)
-            else:
-                st.caption("No categorical feature available for Clustered Bar visual.")
-
-        v_row2_col1, v_row2_col2 = st.columns(2)
-        with v_row2_col1:
-            fig_corr, ins_corr = generate_correlation_heatmap(filtered_df)
-            if fig_corr:
-                st.plotly_chart(fig_corr, width="stretch")
-                st.info(ins_corr)
-            else:
-                st.caption(ins_corr)
-
-        with v_row2_col2:
-            date_candidates = [c for c in filtered_df.columns if "date" in c.lower() or "time" in c.lower() or pd.api.types.is_datetime64_any_dtype(filtered_df[c])]
-            if date_candidates and num_cols:
-                fig_area, ins_area = generate_powerbi_area(filtered_df, date_candidates[0], num_cols[0])
-                if fig_area:
-                    st.plotly_chart(fig_area, width="stretch")
-                    st.info(ins_area)
-            elif num_cols:
-                fig_dist, ins_dist = generate_distribution_chart(filtered_df, num_cols[0])
-                st.plotly_chart(fig_dist, width="stretch")
-                st.info(ins_dist)
-
-        # 4. POWER BI TREEMAP & GAUGE ROW
-        v_row3_col1, v_row3_col2 = st.columns(2)
-        with v_row3_col1:
-            if cat_cols:
-                st.markdown("##### 🗺️ Power BI Treemap Hierarchy")
-                tm_col = cat_cols[0]
-                tm_val = num_cols[0] if num_cols else None
-                fig_tm, ins_tm = generate_powerbi_treemap(filtered_df, tm_col, tm_val)
-                st.plotly_chart(fig_tm, width="stretch")
-                st.info(ins_tm)
-        with v_row3_col2:
-            if num_cols:
-                st.markdown("##### ⏱️ Power BI Target Gauge")
-                target_col_gauge = num_cols[0]
-                cur_mean = float(filtered_df[target_col_gauge].mean()) if not filtered_df.empty else 0
-                max_metric = float(active_df[target_col_gauge].max()) if not active_df.empty else 100
-                fig_gauge = generate_powerbi_gauge(cur_mean, 0, max_metric, f"Average {target_col_gauge}")
-                st.plotly_chart(fig_gauge, width="stretch")
-                st.caption(f"Gauge tracking average {target_col_gauge} across active filters.")
-
-        # 5. POWER BI MATRIX / PIVOT SUMMARY TABLE
-        if cat_cols and num_cols:
+            # 3. POWER BI VISUAL DECOMPOSITION GRID
             st.markdown("---")
-            st.markdown("##### 📋 Power BI Executive Matrix Visual")
-            st.caption("Drill-down aggregation table: Count, Sum, Mean, Min, Max, and Segment Share %")
-            m_cat = st.selectbox("Matrix Row Dimension (Category):", cat_cols, key="matrix_cat_sel")
-            m_num = st.selectbox("Matrix Value Dimension (Metric):", num_cols, key="matrix_num_sel")
-            matrix_df = generate_powerbi_matrix(filtered_df, m_cat, m_num)
-            st.dataframe(matrix_df, width="stretch")
+            st.markdown("##### 📈 Power BI Visual Decomposition Grid")
 
-        # 6. POWER BI CUSTOM VISUAL STUDIO
-        st.markdown("---")
-        st.markdown("##### 🛠️ Power BI Custom Visual Studio")
-        pbi_b1, pbi_b2, pbi_b3, pbi_b4 = st.columns(4)
-        with pbi_b1:
-            pbi_vtype = st.selectbox("Visual Type:", ["Donut", "Clustered Bar", "Treemap", "Line", "Scatter", "Box", "Histogram"], key="pbi_studio_type")
-        with pbi_b2:
-            pbi_x = st.selectbox("X-Axis / Category:", filtered_df.columns, key="pbi_studio_x")
-        with pbi_b3:
-            pbi_y = st.selectbox("Y-Axis / Metric:", ["None"] + list(filtered_df.columns), key="pbi_studio_y")
-        with pbi_b4:
-            pbi_grp = st.selectbox("Color / Legend:", ["None"] + list(filtered_df.columns), key="pbi_studio_grp")
+            v_row1_col1, v_row1_col2 = st.columns(2)
+            with v_row1_col1:
+                if cat_cols:
+                    donut_target = cat_cols[0]
+                    fig_donut, ins_donut = generate_powerbi_donut(filtered_df, donut_target)
+                    st.plotly_chart(fig_donut, width="stretch")
+                    st.info(ins_donut)
+                else:
+                    st.caption("No categorical feature available for Donut visual.")
 
-        custom_pbi_fig = build_custom_chart(filtered_df, pbi_vtype, pbi_x, pbi_y, pbi_grp)
-        st.plotly_chart(custom_pbi_fig, width="stretch")
+            with v_row1_col2:
+                if cat_cols:
+                    bar_cat = cat_cols[min(len(cat_cols)-1, 1)]
+                    bar_num = num_cols[0] if num_cols else None
+                    fig_bar, ins_bar = generate_powerbi_clustered_bar(filtered_df, bar_cat, bar_num)
+                    st.plotly_chart(fig_bar, width="stretch")
+                    st.info(ins_bar)
+                else:
+                    st.caption("No categorical feature available for Clustered Bar visual.")
+
+            v_row2_col1, v_row2_col2 = st.columns(2)
+            with v_row2_col1:
+                fig_corr, ins_corr = generate_correlation_heatmap(filtered_df)
+                if fig_corr:
+                    st.plotly_chart(fig_corr, width="stretch")
+                    st.info(ins_corr)
+                else:
+                    st.caption(ins_corr)
+
+            with v_row2_col2:
+                date_candidates = [c for c in filtered_df.columns if "date" in c.lower() or "time" in c.lower() or pd.api.types.is_datetime64_any_dtype(filtered_df[c])]
+                if date_candidates and num_cols:
+                    fig_area, ins_area = generate_powerbi_area(filtered_df, date_candidates[0], num_cols[0])
+                    if fig_area:
+                        st.plotly_chart(fig_area, width="stretch")
+                        st.info(ins_area)
+                elif num_cols:
+                    fig_dist, ins_dist = generate_distribution_chart(filtered_df, num_cols[0])
+                    st.plotly_chart(fig_dist, width="stretch")
+                    st.info(ins_dist)
+
+            # 4. POWER BI TREEMAP & GAUGE ROW
+            v_row3_col1, v_row3_col2 = st.columns(2)
+            with v_row3_col1:
+                if cat_cols:
+                    st.markdown("##### 🗺️ Power BI Treemap Hierarchy")
+                    tm_col = cat_cols[0]
+                    tm_val = num_cols[0] if num_cols else None
+                    fig_tm, ins_tm = generate_powerbi_treemap(filtered_df, tm_col, tm_val)
+                    st.plotly_chart(fig_tm, width="stretch")
+                    st.info(ins_tm)
+            with v_row3_col2:
+                if num_cols:
+                    st.markdown("##### ⏱️ Power BI Target Gauge")
+                    target_col_gauge = num_cols[0]
+                    cur_mean = float(filtered_df[target_col_gauge].mean()) if not filtered_df.empty else 0
+                    max_metric = float(active_df[target_col_gauge].max()) if not active_df.empty else 100
+                    fig_gauge = generate_powerbi_gauge(cur_mean, 0, max_metric, f"Average {target_col_gauge}")
+                    st.plotly_chart(fig_gauge, width="stretch")
+                    st.caption(f"Gauge tracking average {target_col_gauge} across active filters.")
+
+            # 5. POWER BI MATRIX / PIVOT SUMMARY TABLE
+            if cat_cols and num_cols:
+                st.markdown("---")
+                st.markdown("##### 📋 Power BI Executive Matrix Visual")
+                st.caption("Drill-down aggregation table: Count, Sum, Mean, Min, Max, and Segment Share %")
+                m_cat = st.selectbox("Matrix Row Dimension (Category):", cat_cols, key="matrix_cat_sel")
+                m_num = st.selectbox("Matrix Value Dimension (Metric):", num_cols, key="matrix_num_sel")
+                matrix_df = generate_powerbi_matrix(filtered_df, m_cat, m_num)
+                st.dataframe(matrix_df, width="stretch")
+
+            # 6. POWER BI CUSTOM VISUAL STUDIO
+            st.markdown("---")
+            st.markdown("##### 🛠️ Power BI Custom Visual Studio")
+            pbi_b1, pbi_b2, pbi_b3, pbi_b4 = st.columns(4)
+            with pbi_b1:
+                pbi_vtype = st.selectbox("Visual Type:", ["Donut", "Clustered Bar", "Treemap", "Line", "Scatter", "Box", "Histogram"], key="pbi_studio_type")
+            with pbi_b2:
+                pbi_x = st.selectbox("X-Axis / Category:", filtered_df.columns, key="pbi_studio_x")
+            with pbi_b3:
+                pbi_y = st.selectbox("Y-Axis / Metric:", ["None"] + list(filtered_df.columns), key="pbi_studio_y")
+            with pbi_b4:
+                pbi_grp = st.selectbox("Color / Legend:", ["None"] + list(filtered_df.columns), key="pbi_studio_grp")
+
+            custom_pbi_fig = build_custom_chart(filtered_df, pbi_vtype, pbi_x, pbi_y, pbi_grp)
+            st.plotly_chart(custom_pbi_fig, width="stretch")
+
+        # -----------------------------------------------------------------------------
+        # SUBTAB 2: NATURAL LANGUAGE CHART STUDIO (TEXT-TO-PLOTLY)
+        # -----------------------------------------------------------------------------
+        with eda_subtab2:
+            st.markdown("#### 🎨 Conversational Chart Studio (Text-to-Plotly)")
+            st.caption("Type any visualization request in plain English (e.g. 'Show sales by region as a stacked bar chart', 'Plot distribution of age grouped by survived', 'Scatter plot of fare vs age').")
+
+            c_nl1, c_nl2 = st.columns([3, 1])
+            with c_nl1:
+                chart_query = st.text_input(
+                    "Describe your desired chart:",
+                    placeholder="e.g. Bar chart of Fare by Pclass, or Scatter plot of Age vs Fare colored by Sex",
+                    key="text_to_plotly_query"
+                )
+            with c_nl2:
+                st.write("")
+                st.write("")
+                gen_chart_btn = st.button("🎨 Render Plotly Visual", width="stretch", key="btn_render_text_chart")
+
+            # Quick Prompt Pills
+            st.markdown("**Quick Example Prompts:**")
+            qp_c1, qp_c2, qp_c3, qp_c4 = st.columns(4)
+            n_cols = list(active_df.select_dtypes(include=["number"]).columns)
+            c_cols = list(active_df.select_dtypes(exclude=["number"]).columns)
+            n1 = n_cols[0] if n_cols else "Value"
+            n2 = n_cols[1] if len(n_cols) > 1 else n1
+            c1 = c_cols[0] if c_cols else "Category"
+
+            if qp_c1.button(f"📊 Bar: {n1} by {c1}", key="qp_btn_1"):
+                chart_query = f"Bar chart of {n1} by {c1}"
+                gen_chart_btn = True
+            if qp_c2.button(f"🔵 Scatter: {n1} vs {n2}", key="qp_btn_2"):
+                chart_query = f"Scatter plot of {n1} vs {n2}"
+                gen_chart_btn = True
+            if qp_c3.button(f"📦 Boxplot: {n1} by {c1}", key="qp_btn_3"):
+                chart_query = f"Boxplot of {n1} grouped by {c1}"
+                gen_chart_btn = True
+            if qp_c4.button(f"🍩 Donut: {c1}", key="qp_btn_4"):
+                chart_query = f"Donut chart of {c1}"
+                gen_chart_btn = True
+
+            if gen_chart_btn and chart_query:
+                with st.spinner("Interpreting visual prompt and rendering styled Plotly figure..."):
+                    fig_nl, expl_nl = generate_text_to_plotly_chart(
+                        chart_query, active_df, st.session_state.get("groq_api_key")
+                    )
+                    if fig_nl is not None:
+                        st.markdown(
+                            f"""
+                            <div style="background: #bef264; border: 2px solid #000; border-radius: 12px; padding: 10px 16px; margin: 12px 0; font-weight: 800; font-size: 0.95rem;">
+                                ✦ {expl_nl}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        st.plotly_chart(fig_nl, width="stretch")
+                    else:
+                        st.warning("Could not interpret chart request. Ensure column names match your dataset features.")
+
+        # -----------------------------------------------------------------------------
+        # SUBTAB 3: TIME-SERIES PREDICTIVE FORECASTING
+        # -----------------------------------------------------------------------------
+        with eda_subtab3:
+            st.markdown("#### 📈 Interactive Time-Series Forecasting")
+            st.caption("Forecast future trends with 95% confidence intervals using Statsmodels Holt-Winters Exponential Smoothing, Prophet, or Harmonic Fourier Regression.")
+
+            from src.forecasting import detect_time_series_columns, prepare_time_series, train_time_series_forecast, create_forecast_figure, HAS_PROPHET
+            date_candidates, num_metrics = detect_time_series_columns(active_df)
+
+            if not date_candidates or not num_metrics:
+                st.warning("⚠️ Time-Series forecasting requires at least one date/timestamp column and one numeric metric column.")
+                st.info(f"Detected Date Candidates: {date_candidates} | Numeric Columns: {len(num_metrics)}")
+            else:
+                c_f1, c_f2, c_f3, c_f4 = st.columns([1.5, 1.5, 1.2, 1.5])
+                with c_f1:
+                    sel_date_col = st.selectbox("Date / Timestamp Column:", date_candidates, key="pbi_fore_date_col")
+                with c_f2:
+                    sel_val_col = st.selectbox("Target Variable (Metric):", num_metrics, key="pbi_fore_val_col")
+                with c_f3:
+                    sel_horizon = st.select_slider("Forecast Horizon (Days):", options=[7, 14, 30, 60, 90, 180], value=30, key="pbi_fore_horizon")
+                with c_f4:
+                    avail_algos = ["Auto-Select Best", "Statsmodels Holt-Winters Exponential Smoothing", "Harmonic Fourier Ridge Regression"]
+                    if HAS_PROPHET:
+                        avail_algos.insert(1, "Prophet (Facebook)")
+                    sel_algo = st.selectbox("Forecast Model Engine:", avail_algos, key="pbi_fore_algo_sel")
+
+                if st.button("🚀 Generate Horizon Forecast & Confidence Envelopes", width="stretch", key="btn_run_pbi_forecasting"):
+                    with st.spinner("Fitting predictive time-series model and generating future projections..."):
+                        try:
+                            prep_ts = prepare_time_series(active_df, sel_date_col, sel_val_col, freq="D")
+                            fore_res = train_time_series_forecast(
+                                prep_ts,
+                                sel_date_col,
+                                sel_val_col,
+                                horizon=sel_horizon,
+                                algorithm=sel_algo,
+                            )
+                            st.session_state.forecasting_results = fore_res
+                            st.success(f"✅ Generated {sel_horizon}-day forecast using **{fore_res['model_name']}**!")
+                        except Exception as f_err:
+                            st.error(f"❌ Forecasting error: {str(f_err)}")
+
+                if st.session_state.get("forecasting_results"):
+                    f_res = st.session_state.forecasting_results
+                    f_metrics = f_res["metrics"]
+
+                    # Metric cards for predicted growth and peak values
+                    m1, m2, m3, m4 = st.columns(4)
+                    growth_color = "normal" if f_metrics["expected_growth_pct"] >= 0 else "inverse"
+                    m1.metric("Predicted Growth", f"{f_metrics['expected_growth_pct']:+.1f}%", f"{f_metrics['expected_growth_pct']:+.1f}%", delta_color=growth_color)
+                    m2.metric("Peak Forecast Value", f"{f_metrics['peak_value']:,.2f}")
+                    m3.metric("Minimum Forecast Value", f"{f_metrics['min_value']:,.2f}")
+                    m4.metric("Horizon End Target", f"{f_metrics['end_value']:,.2f}", f"Baseline: {f_metrics['baseline_value']:,.2f}")
+
+                    # Render Interactive Plotly Visual
+                    fig_fore = create_forecast_figure(
+                        f_res["historical_df"],
+                        f_res["forecast_df"],
+                        f_res["date_col"],
+                        f_res["value_col"],
+                    )
+                    st.plotly_chart(fig_fore, width="stretch")
+
+                    with st.expander("📋 View & Download Forecast Numerical Table"):
+                        st.dataframe(f_res["forecast_df"], width="stretch")
+                        csv_f = f_res["forecast_df"].to_csv(index=False).encode("utf-8")
+                        st.download_button("📥 Download Forecast CSV", data=csv_f, file_name=f"forecast_{f_res['value_col']}_{f_res['horizon']}d.csv", mime="text/csv")
 
 
 
@@ -2023,6 +2248,35 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
 
             train_df, _, test_df, _ = st.session_state.tabular_splits
 
+            # -------------------------------------------------------------
+            # AUTOMATED DATA QUALITY & PROFILING SUITE
+            # -------------------------------------------------------------
+            with st.expander("🩺 Automated Data Quality & Profiling Suite (Missing Heatmap & Correlations)", expanded=False):
+                try:
+                    prof_data = generate_data_quality_profile(active_df)
+                    q1, q2, q3, q4 = st.columns(4)
+                    q1.metric("Data Health Score", f"{prof_data['health_score']}/100")
+                    q2.metric("Missing Cell Sparsity", f"{prof_data['sparsity_pct']}%")
+                    q3.metric("Duplicate Rows", f"{prof_data['duplicate_rows']:,}")
+                    q4.metric("Analyzed Features", f"{prof_data['total_cols']}")
+
+                    p_c1, p_c2 = st.columns(2)
+                    with p_c1:
+                        if prof_data["fig_missing"]:
+                            st.plotly_chart(prof_data["fig_missing"], width="stretch")
+                        else:
+                            st.success("✅ Zero Missing Values Detected Across Entire Dataset!")
+                    with p_c2:
+                        if prof_data["fig_corr"]:
+                            st.plotly_chart(prof_data["fig_corr"], width="stretch")
+                        else:
+                            st.info("Correlation matrix requires at least 2 numerical features.")
+
+                    st.markdown("##### 🔬 Column-Level Health & Outlier Audit")
+                    st.dataframe(prof_data["audit_df"], width="stretch")
+                except Exception as prof_err:
+                    st.warning(f"Data quality profiler notice: {str(prof_err)}")
+
             if st.button("🚀 Train 3+ ML Pipelines (1-Click)", key="btn_train_tabular_pipes", width="stretch"):
                 with st.spinner("Executing scikit-learn pipelines with cross-validation..."):
                     res = train_tabular_models(train_df, test_df, target_col=target_col)
@@ -2122,6 +2376,35 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
                                 marker_line_width=1.5
                             )
                             st.plotly_chart(fig_p, use_container_width=True)
+
+                # -------------------------------------------------------------
+                # EXPLAINABLE AI (XAI) & FEATURE IMPACT INTERPRETABILITY
+                # -------------------------------------------------------------
+                st.markdown("---")
+                st.subheader("🧠 Explainable AI (XAI) & Model Interpretability")
+                st.caption("Feature attribution explaining key drivers behind champion model predictions using SHAP / Permutation Importance.")
+
+                try:
+                    xai_res = compute_model_interpretability(
+                        pipeline=res["best_pipeline"],
+                        X_sample=test_df[res["feature_cols"]],
+                        y_sample=test_df[res["target_col"]],
+                        task_type=res.get("task_type", "classification"),
+                    )
+                    st.markdown(
+                        f"""
+                        <div style="background: #e0e7ff; border: 2px solid #000; border-radius: 10px; padding: 8px 14px; margin-bottom: 12px; font-weight: 700;">
+                            ✦ Interpretability Engine: <b>{xai_res['method_used']}</b> | Top Predictive Driver: <code>{xai_res.get('top_feature', 'Primary Feature')}</code>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    st.plotly_chart(xai_res["figure"], width="stretch")
+                    with st.expander("📋 View Ranked Feature Importance Data Table"):
+                        st.dataframe(xai_res["importance_df"], width="stretch")
+                except Exception as xai_err:
+                    st.warning(f"XAI engine notice: {str(xai_err)}")
+
 
     # -------------------------------------------------------------
     # SUITE 2: COMPUTER VISION AUTOML (INSTANT & DEEP LEARNING)
@@ -3085,7 +3368,7 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
             unsafe_allow_html=True,
         )
 
-        rep_c1, rep_c2, rep_c3 = st.columns(3)
+        rep_c1, rep_c2, rep_c3, rep_c4 = st.columns(4)
         with rep_c1:
             st.markdown("#### 📄 Executive PDF Report")
             st.caption("Includes KPIs, full cleaning history, ML benchmarks, and all chatbot Q&A.")
@@ -3105,6 +3388,27 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
             )
 
         with rep_c2:
+            st.markdown("#### 📊 Executive Pitch Deck (.pptx)")
+            st.caption("5-slide executive presentation with KPI cards, audit logs, & ML metrics.")
+            try:
+                pptx_bytes = generate_powerpoint_presentation(
+                    dataset_name=st.session_state.raw_filename or "Dataset",
+                    summary_metrics=summary,
+                    cleaning_log=st.session_state.cleaning_log,
+                    ml_results=st.session_state.ml_results,
+                    chat_history=st.session_state.chat_history,
+                )
+                st.download_button(
+                    "📥 Download Pitch Deck (.pptx)",
+                    data=pptx_bytes,
+                    file_name=f"Executive_Deck_{st.session_state.raw_filename or 'Dataset'}.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    width="stretch",
+                )
+            except Exception as pptx_err:
+                st.error(f"PowerPoint Engine: {str(pptx_err)}")
+
+        with rep_c3:
             st.markdown("#### 📝 Microsoft Word (.docx)")
             st.caption("Editable Word document containing all tabular metrics and responses.")
             docx_bytes = generate_word_report(
@@ -3122,7 +3426,7 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
                 width="stretch",
             )
 
-        with rep_c3:
+        with rep_c4:
             st.markdown("#### 📦 Full Session Export (JSON)")
             st.caption("Raw machine-readable export with every single query, result, and metric.")
             json_str = generate_json_session_export(
