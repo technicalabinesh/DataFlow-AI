@@ -341,7 +341,7 @@ def extract_zip_to_raw(
             os.makedirs(d, exist_ok=True)
 
         # 2. Multi-threaded worker extraction
-        num_workers = min(8, max(2, os.cpu_count() or 4))
+        num_workers = min(4, max(1, os.cpu_count() or 2))
         if total_files < 50:
             num_workers = 1
         

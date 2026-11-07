@@ -49,7 +49,7 @@ def detect_anomalies(
         random_state=random_state,
         n_estimators=75,
         max_samples=min(256, len(X_scaled)),
-        n_jobs=-1,
+        n_jobs=1,
     )
     preds = iso_forest.fit_predict(X_scaled)  # -1 = anomaly, 1 = normal
     raw_scores = iso_forest.decision_function(X_scaled)  # Lower score = more anomalous

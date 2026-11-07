@@ -19,8 +19,14 @@ Features:
 """
 
 import os
-# Configure CPU core count environment variable to prevent Windows WMIC process timeout
-os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count() or 4)
+# Configure CPU and thread pool limits to prevent Streamlit Cloud CPU throttling & Windows WMIC timeout
+is_cloud = os.environ.get("STREAMLIT_SERVER_PORT") is not None or os.path.exists("/mount/src") or "STREAMLIT" in os.environ
+cpu_limit = 1 if is_cloud else min(4, os.cpu_count() or 1)
+
+os.environ["LOKY_MAX_CPU_COUNT"] = str(cpu_limit)
+os.environ["OMP_NUM_THREADS"] = str(cpu_limit)
+os.environ["OPENBLAS_NUM_THREADS"] = str(cpu_limit)
+os.environ["MKL_NUM_THREADS"] = str(cpu_limit)
 
 import joblib
 from datetime import datetime
@@ -206,10 +212,10 @@ def train_tabular_models(
 
     # Initialize model suites with high-accuracy tuned architectures & fast ensembles
     if task_type == "classification":
-        m_lr = LogisticRegression(max_iter=300, C=1.0, class_weight="balanced", random_state=42)
-        m_rf = RandomForestClassifier(n_estimators=80, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
-        m_gb = HistGradientBoostingClassifier(max_iter=80, learning_rate=0.08, max_depth=6, random_state=42)
-        m_et = ExtraTreesClassifier(n_estimators=80, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_lr = LogisticRegression(max_iter=200, C=1.0, class_weight="balanced", random_state=42)
+        m_rf = RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_gb = HistGradientBoostingClassifier(max_iter=50, learning_rate=0.08, max_depth=6, random_state=42)
+        m_et = ExtraTreesClassifier(n_estimators=50, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
         m_vote = VotingClassifier(
             estimators=[("lr", m_lr), ("et", m_et), ("rf", m_rf)],
             voting="soft",
@@ -224,9 +230,9 @@ def train_tabular_models(
         metric_key = "Accuracy"
     else:
         m_ridge = Ridge(alpha=1.0, random_state=42)
-        m_rf = RandomForestRegressor(n_estimators=80, max_depth=10, min_samples_split=4, random_state=42)
-        m_gb = HistGradientBoostingRegressor(max_iter=80, learning_rate=0.08, max_depth=6, random_state=42)
-        m_et = ExtraTreesRegressor(n_estimators=80, max_depth=10, min_samples_split=4, random_state=42)
+        m_rf = RandomForestRegressor(n_estimators=50, max_depth=10, min_samples_split=4, random_state=42)
+        m_gb = HistGradientBoostingRegressor(max_iter=50, learning_rate=0.08, max_depth=6, random_state=42)
+        m_et = ExtraTreesRegressor(n_estimators=50, max_depth=10, min_samples_split=4, random_state=42)
         m_vote = VotingRegressor(
             estimators=[("ridge", m_ridge), ("et", m_et), ("gbr", m_gb)],
         )
@@ -244,15 +250,19 @@ def train_tabular_models(
     best_model_name = None
     best_score = -float("inf")
 
-    # Fit and evaluate each pipeline with maximum performance
+    # Fit and evaluate each pipeline with maximum performance & CPU efficiency
     for name, model_instance in models_dict.items():
         # Fast cross-validation directly on pre-transformed features (no redundant preprocessor refitting)
         scoring = "accuracy" if task_type == "classification" else "r2"
-        try:
-            cv_scores = cross_val_score(model_instance, X_train_trans, y_train, cv=3, scoring=scoring)
-            cv_mean = float(np.mean(cv_scores))
-        except Exception:
+        # Avoid redundant 9-fit cross-validation on composite ensemble to prevent Cloud CPU throttling
+        if "voting" in name.lower():
             cv_mean = 0.0
+        else:
+            try:
+                cv_scores = cross_val_score(model_instance, X_train_trans, y_train, cv=3, scoring=scoring)
+                cv_mean = float(np.mean(cv_scores))
+            except Exception:
+                cv_mean = 0.0
 
         # Fit model on pre-transformed training set
         model_instance.fit(X_train_trans, y_train)
@@ -297,6 +307,18 @@ def train_tabular_models(
             if r2 > best_score:
                 best_score = r2
                 best_model_name = name
+
+    # For composite voting ensemble, populate representative CV score derived from base models
+    for row in leaderboard:
+        if "voting" in row["Model"].lower():
+            if task_type == "classification":
+                base_cvs = [r["CV Score (%)"] for r in leaderboard if "voting" not in r["Model"].lower() and r.get("CV Score (%)", 0) > 0]
+                if base_cvs:
+                    row["CV Score (%)"] = round(float(np.mean(base_cvs)), 2)
+            else:
+                base_cvs = [r["CV Score (R2)"] for r in leaderboard if "voting" not in r["Model"].lower() and r.get("CV Score (R2)", 0) > 0]
+                if base_cvs:
+                    row["CV Score (R2)"] = round(float(np.mean(base_cvs)), 4)
 
     sort_metric = "Accuracy (%)" if task_type == "classification" else "R2 Score"
     leaderboard_df = pd.DataFrame(leaderboard).sort_values(

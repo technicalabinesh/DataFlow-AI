@@ -14,8 +14,16 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-# Configure multi-core environment variables to prevent Windows subprocess timeouts
-os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 4))
+# Configure CPU and thread pool limits to prevent Streamlit Cloud CPU throttling & Windows subprocess timeouts
+is_cloud = os.environ.get("STREAMLIT_SERVER_PORT") is not None or os.path.exists("/mount/src") or "STREAMLIT" in os.environ
+cpu_limit = 1 if is_cloud else min(4, os.cpu_count() or 1)
+
+os.environ["LOKY_MAX_CPU_COUNT"] = str(cpu_limit)
+os.environ["OMP_NUM_THREADS"] = str(cpu_limit)
+os.environ["OPENBLAS_NUM_THREADS"] = str(cpu_limit)
+os.environ["MKL_NUM_THREADS"] = str(cpu_limit)
+os.environ["VECLIB_MAXIMUM_THREADS"] = str(cpu_limit)
+os.environ["NUMEXPR_NUM_THREADS"] = str(cpu_limit)
 
 import re
 import zipfile
