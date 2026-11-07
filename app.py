@@ -677,10 +677,32 @@ TAB_MODULE_MAP = {
 }
 MODULE_TAB_MAP = {v: k for k, v in TAB_MODULE_MAP.items()}
 
-if "active_tab" in st.session_state and st.session_state.active_tab in TAB_MODULE_MAP:
-    st.session_state.active_module = TAB_MODULE_MAP[st.session_state.active_tab]
-elif "active_module" in st.session_state and st.session_state.active_module in MODULE_TAB_MAP:
-    st.session_state.active_tab = MODULE_TAB_MAP[st.session_state.active_module]
+def set_active_screen(tab_name: str, module_name: Optional[str] = None):
+    st.session_state.active_tab = tab_name
+    st.session_state.active_module = module_name or TAB_MODULE_MAP.get(tab_name, "ingest")
+    st.session_state["_prev_active_tab"] = st.session_state.active_tab
+    st.session_state["_prev_active_module"] = st.session_state.active_module
+
+# Bidirectional synchronization between active_tab and active_module
+curr_tab = st.session_state.get("active_tab", "Ingest")
+curr_mod = st.session_state.get("active_module", "ingest")
+prev_tab = st.session_state.get("_prev_active_tab", curr_tab)
+prev_mod = st.session_state.get("_prev_active_module", curr_mod)
+
+if curr_mod != prev_mod and curr_mod in MODULE_TAB_MAP:
+    curr_tab = MODULE_TAB_MAP[curr_mod]
+    st.session_state.active_tab = curr_tab
+elif curr_tab != prev_tab and curr_tab in TAB_MODULE_MAP:
+    curr_mod = TAB_MODULE_MAP[curr_tab]
+    st.session_state.active_module = curr_mod
+else:
+    if curr_tab in TAB_MODULE_MAP:
+        st.session_state.active_module = TAB_MODULE_MAP[curr_tab]
+    elif curr_mod in MODULE_TAB_MAP:
+        st.session_state.active_tab = MODULE_TAB_MAP[curr_mod]
+
+st.session_state["_prev_active_tab"] = st.session_state.active_tab
+st.session_state["_prev_active_module"] = st.session_state.active_module
 
 # Sync st.session_state["df"] with the latest active working DataFrame
 if st.session_state.get("cleaned_df") is not None:
@@ -714,43 +736,37 @@ with col_logo:
 with col_nav1:
     btn_label = "📁 Ingest" if st.session_state.active_tab != "Ingest" else "👉 Ingest"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "Ingest"
-        st.session_state.active_module = "ingest"
+        set_active_screen("Ingest", "ingest")
         st.rerun()
 
 with col_nav2:
     btn_label = "🧹 Clean" if st.session_state.active_tab != "Clean" else "👉 Clean"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "Clean"
-        st.session_state.active_module = "clean"
+        set_active_screen("Clean", "clean")
         st.rerun()
 
 with col_nav3:
     btn_label = "📊 Power BI" if st.session_state.active_tab != "Power BI" else "👉 Power BI"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "Power BI"
-        st.session_state.active_module = "eda"
+        set_active_screen("Power BI", "eda")
         st.rerun()
 
 with col_nav4:
     btn_label = "🤖 AutoML" if st.session_state.active_tab != "AutoML" else "👉 AutoML"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "AutoML"
-        st.session_state.active_module = "automl"
+        set_active_screen("AutoML", "automl")
         st.rerun()
 
 with col_nav5:
     btn_label = "💬 Voice AI" if st.session_state.active_tab != "Voice AI" else "👉 Voice AI"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "Voice AI"
-        st.session_state.active_module = "chat"
+        set_active_screen("Voice AI", "chat")
         st.rerun()
 
 with col_nav6:
     btn_label = "📑 Reports" if st.session_state.active_tab != "Reports" else "👉 Reports"
     if st.button(btn_label, width="stretch"):
-        st.session_state.active_tab = "Reports"
-        st.session_state.active_module = "report"
+        set_active_screen("Reports", "report")
         st.rerun()
 
 with col_badge:
@@ -808,7 +824,7 @@ def render_hero_blueprint_and_milestones():
                 st.rerun()
         with btn_c2:
             if st.button("📁 Load Custom Dataset", key="hero_btn_ingest", width="stretch"):
-                st.session_state.active_module = "ingest"
+                set_active_screen("Ingest", "ingest")
                 st.rerun()
 
         st.html(
@@ -929,7 +945,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open Ingest ↗", key="m_btn_1", width="stretch"):
-            st.session_state.active_module = "ingest"
+            set_active_screen("Ingest", "ingest")
             st.rerun()
 
     with m_c2:
@@ -946,7 +962,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open Cleaner ↗", key="m_btn_2", width="stretch"):
-            st.session_state.active_module = "clean"
+            set_active_screen("Clean", "clean")
             st.rerun()
 
     with m_c3:
@@ -963,7 +979,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open Power BI ↗", key="m_btn_3", width="stretch"):
-            st.session_state.active_module = "eda"
+            set_active_screen("Power BI", "eda")
             st.rerun()
 
     with m_c4:
@@ -980,7 +996,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open AutoML ↗", key="m_btn_4", width="stretch"):
-            st.session_state.active_module = "automl"
+            set_active_screen("AutoML", "automl")
             st.rerun()
 
     with m_c5:
@@ -997,7 +1013,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open AI ↗", key="m_btn_5", width="stretch"):
-            st.session_state.active_module = "chat"
+            set_active_screen("Voice AI", "chat")
             st.rerun()
 
     with m_c6:
@@ -1014,7 +1030,7 @@ def render_hero_blueprint_and_milestones():
             """
         )
         if st.button("Open Reports ↗", key="m_btn_6", width="stretch"):
-            st.session_state.active_module = "report"
+            set_active_screen("Reports", "report")
             st.rerun()
 
 
@@ -1234,12 +1250,12 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
                         if st.session_state.image_splits is None:
                             train_l, val_l, test_l, rep = split_image_dataset(items)
                             st.session_state.image_splits = (train_l, val_l, test_l, rep)
-                        st.session_state.active_module = "automl"
+                        set_active_screen("AutoML", "automl")
                         st.rerun()
 
                 with c_ing2:
                     if st.button("📊 View Vision Analytics in Power BI ↗", key="btn_confirm_go_pbi", width="stretch"):
-                        st.session_state.active_module = "eda"
+                        set_active_screen("Power BI", "eda")
                         st.rerun()
 
             elif scan_res.get("mode") in ["tables_mergeable", "tables_single"]:
@@ -1505,7 +1521,7 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
         with c_next2:
             if st.button("👉 Proceed to AutoML Vision Studio ↗", key="goto_vision_automl_btn", width="stretch"):
                 st.session_state.active_automl_subtab = "vision"
-                st.session_state.active_module = "automl"
+                set_active_screen("AutoML", "automl")
                 st.rerun()
 
 
@@ -1550,7 +1566,7 @@ elif st.session_state.active_tab == "Clean" or st.session_state.active_module ==
         )
         if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
             st.session_state.active_automl_subtab = "vision"
-            st.session_state.active_module = "automl"
+            set_active_screen("AutoML", "automl")
             st.rerun()
 
     elif st.session_state.raw_df is None:
@@ -1651,7 +1667,7 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
 
         if st.button("👉 Proceed to AutoML Studio for MobileNetV2 Deep Learning ↗", width="stretch"):
             st.session_state.active_automl_subtab = "vision"
-            st.session_state.active_module = "automl"
+            set_active_screen("AutoML", "automl")
             st.rerun()
 
     elif st.session_state.cleaned_df is None and st.session_state.raw_df is None:
@@ -2230,7 +2246,7 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
                     st.rerun()
             with c_tb2:
                 if st.button("📁 Go to Ingest to Load CSV / Excel ↗", key="automl_go_ingest_tab", width="stretch"):
-                    st.session_state.active_module = "ingest"
+                    set_active_screen("Ingest", "ingest")
                     st.rerun()
         else:
             available_cols = list(active_df.columns)
@@ -2535,7 +2551,7 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
                 c_vi1, c_vi2 = st.columns(2)
                 with c_vi1:
                     if st.button("📁 Go to Ingest to Upload Image ZIP Archive ↗", key="automl_go_ingest_img", width="stretch"):
-                        st.session_state.active_module = "ingest"
+                        set_active_screen("Ingest", "ingest")
                         st.rerun()
                 with c_vi2:
                     if st.button("⚡ Test With Animal Images (Cats vs Dogs Sample)", key="automl_animal_load_btn", width="stretch"):
