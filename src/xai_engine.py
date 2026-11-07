@@ -260,3 +260,4 @@ def generate_data_quality_profile(df: pd.DataFrame) -> Dict[str, Any]:
         "fig_corr": fig_corr,
         "numeric_cols": numeric_cols,
     }
+
