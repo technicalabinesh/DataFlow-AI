@@ -636,7 +636,9 @@ def init_session():
         "groq_api_key": os.getenv("GROQ_API_KEY", ""),
         "selected_groq_model": "qwen/qwen3.8-27b",
         "selected_whisper_model": "whisper-large-v3-turbo",
+        "active_tab": "Ingest",
         "active_module": "ingest",
+        "df": None,
         "active_automl_subtab": "tabular",  # 'ingest', 'clean', 'eda', 'automl', 'chat', 'report'
         "language": "English",
         "scanned_dir": None,
@@ -654,6 +656,29 @@ def init_session():
             st.session_state[k] = v
 
 init_session()
+
+# Two-way sync mapping between human-readable active_tab and internal active_module
+TAB_MODULE_MAP = {
+    "Ingest": "ingest",
+    "Clean": "clean",
+    "Power BI": "eda",
+    "AutoML": "automl",
+    "Voice AI": "chat",
+    "Reports": "report",
+}
+MODULE_TAB_MAP = {v: k for k, v in TAB_MODULE_MAP.items()}
+
+if "active_tab" in st.session_state and st.session_state.active_tab in TAB_MODULE_MAP:
+    st.session_state.active_module = TAB_MODULE_MAP[st.session_state.active_tab]
+elif "active_module" in st.session_state and st.session_state.active_module in MODULE_TAB_MAP:
+    st.session_state.active_tab = MODULE_TAB_MAP[st.session_state.active_module]
+
+# Sync st.session_state["df"] with the latest active working DataFrame
+if st.session_state.get("cleaned_df") is not None:
+    st.session_state["df"] = st.session_state.cleaned_df
+elif st.session_state.get("raw_df") is not None:
+    st.session_state["df"] = st.session_state.raw_df
+
 
 
 # -----------------------------------------------------------------------------
@@ -679,38 +704,44 @@ with col_logo:
     )
 
 with col_nav1:
-    btn_label = "📁 Ingest" if st.session_state.active_module != "ingest" else "👉 Ingest"
+    btn_label = "📁 Ingest" if st.session_state.active_tab != "Ingest" else "👉 Ingest"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "Ingest"
         st.session_state.active_module = "ingest"
         st.rerun()
 
 with col_nav2:
-    btn_label = "🧹 Clean" if st.session_state.active_module != "clean" else "👉 Clean"
+    btn_label = "🧹 Clean" if st.session_state.active_tab != "Clean" else "👉 Clean"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "Clean"
         st.session_state.active_module = "clean"
         st.rerun()
 
 with col_nav3:
-    btn_label = "📊 Power BI" if st.session_state.active_module != "eda" else "👉 Power BI"
+    btn_label = "📊 Power BI" if st.session_state.active_tab != "Power BI" else "👉 Power BI"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "Power BI"
         st.session_state.active_module = "eda"
         st.rerun()
 
 with col_nav4:
-    btn_label = "🤖 AutoML" if st.session_state.active_module != "automl" else "👉 AutoML"
+    btn_label = "🤖 AutoML" if st.session_state.active_tab != "AutoML" else "👉 AutoML"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "AutoML"
         st.session_state.active_module = "automl"
         st.rerun()
 
 with col_nav5:
-    btn_label = "💬 Voice AI" if st.session_state.active_module != "chat" else "👉 Voice AI"
+    btn_label = "💬 Voice AI" if st.session_state.active_tab != "Voice AI" else "👉 Voice AI"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "Voice AI"
         st.session_state.active_module = "chat"
         st.rerun()
 
 with col_nav6:
-    btn_label = "📑 Reports" if st.session_state.active_module != "report" else "👉 Reports"
+    btn_label = "📑 Reports" if st.session_state.active_tab != "Reports" else "👉 Reports"
     if st.button(btn_label, width="stretch"):
+        st.session_state.active_tab = "Reports"
         st.session_state.active_module = "report"
         st.rerun()
 
@@ -731,259 +762,263 @@ st.html("<hr style='border: 1.5px solid #000; margin-top: 8px; margin-bottom: 24
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-# HERO SECTION WITH UNIFIED AI DATA COPILOT
-# -----------------------------------------------------------------------------
-hero_left, hero_right = st.columns([1.3, 1.4])
+def render_hero_blueprint_and_milestones():
+    """Renders the Seamless Data Journey hero banner, system blueprint, and workflow milestone cards only on Ingest/Home."""
+    # HERO SECTION WITH UNIFIED AI DATA COPILOT
+    # -----------------------------------------------------------------------------
+    hero_left, hero_right = st.columns([1.3, 1.4])
 
-with hero_left:
-    st.html(
-        """
-        <div style="font-size: 2.5rem; font-weight: 900; color: #000000; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 10px;">
-            Seamless <span style="text-decoration: underline; text-decoration-color: #8b5cf6;">Data</span> Journey ⤳
-        </div>
-        <div style="font-size: 1.22rem; color: #1e293b; font-weight: 800; line-height: 1.5; margin-bottom: 8px; max-width: 660px;">
-            Universal AI Data Analyst: Autonomous Cleaning, Power BI Dashboard, AutoML Leaderboards, 
-            and Multilingual Voice & Text Chatbot in English & Tamil.
-        </div>
-        <div style="font-size: 0.92rem; color: #334155; font-weight: 600; line-height: 1.55; margin-bottom: 20px; max-width: 660px; background: #f8fafc; border-left: 4px solid #8b5cf6; padding: 10px 14px; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 0px rgba(0,0,0,0.06);">
-            ✦ <b>Enterprise Multi-Modal Intelligence Engine:</b> Featuring Zero-Leakage Train/Val/Test Splitting, 
-            Automated Type Imputation & Outlier Mitigation, Dynamic Power BI Visual Slicers, High-Accuracy Ensembles (Soft Voting & Extra Trees), 
-            Deep Computer Vision (MobileNetV2 Transfer Learning & Real-Time Inference), Sentiment NLP, 
-            Harmonic Time-Series Forecasting, and Multilingual Conversational Voice Copilot with Whisper STT & LLaMA 3.3.
-        </div>
-        """
-    )
+    with hero_left:
+        st.html(
+            """
+            <div style="font-size: 2.5rem; font-weight: 900; color: #000000; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 10px;">
+                Seamless <span style="text-decoration: underline; text-decoration-color: #8b5cf6;">Data</span> Journey ⤳
+            </div>
+            <div style="font-size: 1.22rem; color: #1e293b; font-weight: 800; line-height: 1.5; margin-bottom: 8px; max-width: 660px;">
+                Universal AI Data Analyst: Autonomous Cleaning, Power BI Dashboard, AutoML Leaderboards, 
+                and Multilingual Voice & Text Chatbot in English & Tamil.
+            </div>
+            <div style="font-size: 0.92rem; color: #334155; font-weight: 600; line-height: 1.55; margin-bottom: 20px; max-width: 660px; background: #f8fafc; border-left: 4px solid #8b5cf6; padding: 10px 14px; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 0px rgba(0,0,0,0.06);">
+                ✦ <b>Enterprise Multi-Modal Intelligence Engine:</b> Featuring Zero-Leakage Train/Val/Test Splitting, 
+                Automated Type Imputation & Outlier Mitigation, Dynamic Power BI Visual Slicers, High-Accuracy Ensembles (Soft Voting & Extra Trees), 
+                Deep Computer Vision (MobileNetV2 Transfer Learning & Real-Time Inference), Sentiment NLP, 
+                Harmonic Time-Series Forecasting, and Multilingual Conversational Voice Copilot with Whisper STT & LLaMA 3.3.
+            </div>
+            """
+        )
 
-    btn_c1, btn_c2 = st.columns([1.5, 1.5])
-    with btn_c1:
-        if st.button("⚡ Test With Titanic (1-Click)", key="hero_btn_titanic", width="stretch"):
-            df_t = pd.read_csv(SAMPLE_PATHS["titanic"])
-            st.session_state.raw_df = df_t
-            st.session_state.cleaned_df = df_t.copy()
-            st.session_state.raw_filename = "titanic.csv (Sample)"
-            st.session_state.dataset_type = "tabular"
-            st.session_state.tabular_splits = None
-            st.session_state.ml_results = None
-            st.rerun()
-    with btn_c2:
-        if st.button("📁 Load Custom Dataset", key="hero_btn_ingest", width="stretch"):
+        btn_c1, btn_c2 = st.columns([1.5, 1.5])
+        with btn_c1:
+            if st.button("⚡ Test With Titanic (1-Click)", key="hero_btn_titanic", width="stretch"):
+                df_t = pd.read_csv(SAMPLE_PATHS["titanic"])
+                st.session_state.raw_df = df_t
+                st.session_state.cleaned_df = df_t.copy()
+                st.session_state.raw_filename = "titanic.csv (Sample)"
+                st.session_state.dataset_type = "tabular"
+                st.session_state.tabular_splits = None
+                st.session_state.ml_results = None
+                st.rerun()
+        with btn_c2:
+            if st.button("📁 Load Custom Dataset", key="hero_btn_ingest", width="stretch"):
+                st.session_state.active_module = "ingest"
+                st.rerun()
+
+        st.html(
+            """
+            <div style="margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;">
+                <span style="font-weight: 900; font-size: 0.82rem; text-transform: uppercase; color: #000000; letter-spacing: 0.05em; white-space: nowrap;">Universal Formats:</span>
+                <span class="neo-badge badge-purple" style="font-size: 0.76rem; padding: 5px 14px;">CSV / TSV</span>
+                <span class="neo-badge badge-lime" style="font-size: 0.76rem; padding: 5px 14px;">Excel (.xlsx/.xls)</span>
+                <span class="neo-badge badge-cyan" style="font-size: 0.76rem; padding: 5px 14px;">Parquet & JSON</span>
+                <span class="neo-badge badge-yellow" style="font-size: 0.76rem; padding: 5px 14px;">Vision Folders</span>
+            </div>
+            """
+        )
+
+    with hero_right:
+        st.html(
+            """
+            <div style="background: #ffffff; border: 2.5px solid #000000; border-radius: 20px; box-shadow: 4px 4px 0px #000000; padding: 20px 22px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
+                    <span class="neo-badge badge-purple" style="font-size: 0.68rem;">SYSTEM ARCHITECTURE</span>
+                    <span class="neo-badge badge-lime" style="font-size: 0.68rem;">END-TO-END PIPELINE</span>
+                    <span class="neo-badge badge-cyan" style="font-size: 0.68rem;">ENTERPRISE VIVA READY</span>
+                </div>
+
+                <div style="font-size: 1.25rem; font-weight: 900; color: #000000; line-height: 1.2; margin-bottom: 6px;">
+                    ✦ Universal AI Data Analyst — System Blueprint
+                </div>
+                <div style="font-size: 0.82rem; color: #475569; font-weight: 600; line-height: 1.45; margin-bottom: 14px;">
+                    Fully automated analytics engine: from multi-format raw data ingestion to Power BI executive dashboards, dual AutoML, and multilingual conversational AI.
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px;">
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            📁 1. Universal Ingest
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            Auto delimiter sniff (CSV/TSV), multi-sheet Excel, Parquet, JSON & recursive vision folders.
+                        </div>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            🧼 2. Autonomous Cleaner
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            Type coercion, median/mode imputation, IQR outlier capping & zero data-leakage splits.
+                        </div>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            📊 3. Power BI Dashboard
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            Interactive Slicers, 5 KPI Scorecards, Donut decomposition, Treemap & dynamic Matrix table.
+                        </div>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            🤖 4. Dual AutoML Studio
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            Scikit-Learn tabular pipelines (RF, GB, Ridge) with 5-fold CV + PyTorch MobileNetV2 for Vision.
+                        </div>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            🎙️ 5. Voice & Text Copilot
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            Groq LLM Pandas code generator, AST safety sandbox, Whisper STT mic & English/தமிழ் queries.
+                        </div>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
+                        <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
+                            📑 6. Executive Reports
+                        </div>
+                        <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
+                            1-click comprehensive exports in PDF (ReportLab), Word (.docx), and session JSON audit logs.
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: #fef9c3; border: 1.5px solid #000000; border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.1rem;">🎓</span>
+                    <span style="font-size: 0.74rem; color: #000000; font-weight: 700; line-height: 1.3;">
+                        <b>Viva Voce Defense Ready:</b> Zero data leakage with isolated splits, Python AST sandboxing against malicious queries, and offline fallback resilience.
+                    </span>
+                </div>
+            </div>
+            """
+        )
+
+    st.markdown("<hr style='border: 1.5px solid #000; margin-top: 25px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+
+
+    # -----------------------------------------------------------------------------
+    # QUICK MILESTONE TILES (ALL 6 CAPABILITIES TOGETHER)
+    # -----------------------------------------------------------------------------
+    st.markdown("##### 📌 Workflow Milestones & Unified Direct Actions")
+    m_c1, m_c2, m_c3, m_c4, m_c5, m_c6 = st.columns(6)
+
+    with m_c1:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 1</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">INGEST</span>
+                </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📁 Load Dataset</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">CSV, Excel, Vision & Split</div>
+            </div>
+            """
+        )
+        if st.button("Open Ingest ↗", key="m_btn_1", width="stretch"):
             st.session_state.active_module = "ingest"
             st.rerun()
 
-    st.html(
-        """
-        <div style="margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;">
-            <span style="font-weight: 900; font-size: 0.82rem; text-transform: uppercase; color: #000000; letter-spacing: 0.05em; white-space: nowrap;">Universal Formats:</span>
-            <span class="neo-badge badge-purple" style="font-size: 0.76rem; padding: 5px 14px;">CSV / TSV</span>
-            <span class="neo-badge badge-lime" style="font-size: 0.76rem; padding: 5px 14px;">Excel (.xlsx/.xls)</span>
-            <span class="neo-badge badge-cyan" style="font-size: 0.76rem; padding: 5px 14px;">Parquet & JSON</span>
-            <span class="neo-badge badge-yellow" style="font-size: 0.76rem; padding: 5px 14px;">Vision Folders</span>
-        </div>
-        """
-    )
-
-with hero_right:
-    st.html(
-        """
-        <div style="background: #ffffff; border: 2.5px solid #000000; border-radius: 20px; box-shadow: 4px 4px 0px #000000; padding: 20px 22px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
-                <span class="neo-badge badge-purple" style="font-size: 0.68rem;">SYSTEM ARCHITECTURE</span>
-                <span class="neo-badge badge-lime" style="font-size: 0.68rem;">END-TO-END PIPELINE</span>
-                <span class="neo-badge badge-cyan" style="font-size: 0.68rem;">ENTERPRISE VIVA READY</span>
-            </div>
-            
-            <div style="font-size: 1.25rem; font-weight: 900; color: #000000; line-height: 1.2; margin-bottom: 6px;">
-                ✦ Universal AI Data Analyst — System Blueprint
-            </div>
-            <div style="font-size: 0.82rem; color: #475569; font-weight: 600; line-height: 1.45; margin-bottom: 14px;">
-                Fully automated analytics engine: from multi-format raw data ingestion to Power BI executive dashboards, dual AutoML, and multilingual conversational AI.
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px;">
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        📁 1. Universal Ingest
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        Auto delimiter sniff (CSV/TSV), multi-sheet Excel, Parquet, JSON & recursive vision folders.
-                    </div>
+    with m_c2:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 2</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">CLEAN</span>
                 </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🧹 Auto Cleaner</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Types, Impute, Outliers</div>
+            </div>
+            """
+        )
+        if st.button("Open Cleaner ↗", key="m_btn_2", width="stretch"):
+            st.session_state.active_module = "clean"
+            st.rerun()
 
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        🧼 2. Autonomous Cleaner
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        Type coercion, median/mode imputation, IQR outlier capping & zero data-leakage splits.
-                    </div>
+    with m_c3:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-cyan" style="font-size: 0.62rem; padding: 2px 8px;">Step 3</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">POWER BI</span>
                 </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Power BI</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Slicers, Donut, Matrix</div>
+            </div>
+            """
+        )
+        if st.button("Open Power BI ↗", key="m_btn_3", width="stretch"):
+            st.session_state.active_module = "eda"
+            st.rerun()
 
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        📊 3. Power BI Dashboard
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        Interactive Slicers, 5 KPI Scorecards, Donut decomposition, Treemap & dynamic Matrix table.
-                    </div>
+    with m_c4:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-lime" style="font-size: 0.62rem; padding: 2px 8px;">Step 4</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AUTOML</span>
                 </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🤖 AutoML Studio</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">3+ Models & Predict</div>
+            </div>
+            """
+        )
+        if st.button("Open AutoML ↗", key="m_btn_4", width="stretch"):
+            st.session_state.active_module = "automl"
+            st.rerun()
 
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        🤖 4. Dual AutoML Studio
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        Scikit-Learn tabular pipelines (RF, GB, Ridge) with 5-fold CV + PyTorch MobileNetV2 for Vision.
-                    </div>
+    with m_c5:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 5</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AI INTEL</span>
                 </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">💬 Voice & Text AI</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Instant Mic STT & Text AI</div>
+            </div>
+            """
+        )
+        if st.button("Open AI ↗", key="m_btn_5", width="stretch"):
+            st.session_state.active_module = "chat"
+            st.rerun()
 
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        🎙️ 5. Voice & Text Copilot
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        Groq LLM Pandas code generator, AST safety sandbox, Whisper STT mic & English/தமிழ் queries.
-                    </div>
+    with m_c6:
+        st.html(
+            """
+            <div class="milestone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 6</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">REPORTS</span>
                 </div>
-
-                <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
-                    <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                        📑 6. Executive Reports
-                    </div>
-                    <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
-                        1-click comprehensive exports in PDF (ReportLab), Word (.docx), and session JSON audit logs.
-                    </div>
-                </div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📑 Executive Reports</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Download Q&A, PDF & Word</div>
             </div>
-
-            <div style="background: #fef9c3; border: 1.5px solid #000000; border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.1rem;">🎓</span>
-                <span style="font-size: 0.74rem; color: #000000; font-weight: 700; line-height: 1.3;">
-                    <b>Viva Voce Defense Ready:</b> Zero data leakage with isolated splits, Python AST sandboxing against malicious queries, and offline fallback resilience.
-                </span>
-            </div>
-        </div>
-        """
-    )
-
-st.markdown("<hr style='border: 1.5px solid #000; margin-top: 25px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+            """
+        )
+        if st.button("Open Reports ↗", key="m_btn_6", width="stretch"):
+            st.session_state.active_module = "report"
+            st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# QUICK MILESTONE TILES (ALL 6 CAPABILITIES TOGETHER)
-# -----------------------------------------------------------------------------
-st.markdown("##### 📌 Workflow Milestones & Unified Direct Actions")
-m_c1, m_c2, m_c3, m_c4, m_c5, m_c6 = st.columns(6)
+    st.markdown("<hr style='border: 1.5px solid #000; margin-top: 25px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-with m_c1:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 1</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">INGEST</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📁 Load Dataset</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">CSV, Excel, Vision & Split</div>
-        </div>
-        """
-    )
-    if st.button("Open Ingest ↗", key="m_btn_1", width="stretch"):
-        st.session_state.active_module = "ingest"
-        st.rerun()
-
-with m_c2:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 2</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">CLEAN</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🧹 Auto Cleaner</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Types, Impute, Outliers</div>
-        </div>
-        """
-    )
-    if st.button("Open Cleaner ↗", key="m_btn_2", width="stretch"):
-        st.session_state.active_module = "clean"
-        st.rerun()
-
-with m_c3:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-cyan" style="font-size: 0.62rem; padding: 2px 8px;">Step 3</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">POWER BI</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Power BI</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Slicers, Donut, Matrix</div>
-        </div>
-        """
-    )
-    if st.button("Open Power BI ↗", key="m_btn_3", width="stretch"):
-        st.session_state.active_module = "eda"
-        st.rerun()
-
-with m_c4:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-lime" style="font-size: 0.62rem; padding: 2px 8px;">Step 4</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AUTOML</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🤖 AutoML Studio</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">3+ Models & Predict</div>
-        </div>
-        """
-    )
-    if st.button("Open AutoML ↗", key="m_btn_4", width="stretch"):
-        st.session_state.active_module = "automl"
-        st.rerun()
-
-with m_c5:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-purple" style="font-size: 0.62rem; padding: 2px 8px;">Step 5</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">AI INTEL</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">💬 Voice & Text AI</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Instant Mic STT & Text AI</div>
-        </div>
-        """
-    )
-    if st.button("Open AI ↗", key="m_btn_5", width="stretch"):
-        st.session_state.active_module = "chat"
-        st.rerun()
-
-with m_c6:
-    st.html(
-        """
-        <div class="milestone-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span class="neo-badge badge-yellow" style="font-size: 0.62rem; padding: 2px 8px;">Step 6</span>
-                <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">REPORTS</span>
-            </div>
-            <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📑 Executive Reports</div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Download Q&A, PDF & Word</div>
-        </div>
-        """
-    )
-    if st.button("Open Reports ↗", key="m_btn_6", width="stretch"):
-        st.session_state.active_module = "report"
-        st.rerun()
-
-
-st.markdown("<hr style='border: 1.5px solid #000; margin-top: 25px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 
 # =============================================================================
-# MODULE 1: UNIVERSAL INGESTION & AUTO-SPLIT
+# PAGE ROUTING (Ingest, Clean, Power BI, AutoML, Voice AI, Reports)
 # =============================================================================
-if st.session_state.active_module == "ingest":
+if st.session_state.active_tab == "Ingest" or st.session_state.active_module == "ingest":
+    render_hero_blueprint_and_milestones()
     st.markdown("### 📁 Universal Ingestion & Auto-Split Engine")
     
     ingest_tab1, ingest_tab2 = st.tabs(["📄 Single File Ingestion", "📂 Folder & ZIP Auto-Detect"])
@@ -1387,7 +1422,7 @@ if st.session_state.active_module == "ingest":
 # =============================================================================
 # MODULE 2: AUTO DATA CLEANING
 # =============================================================================
-elif st.session_state.active_module == "clean":
+elif st.session_state.active_tab == "Clean" or st.session_state.active_module == "clean":
     st.markdown("### 🧹 Autonomous Data Cleaning & Vision Augmentation Engine")
 
     if st.session_state.dataset_type == "image":
@@ -1499,7 +1534,7 @@ elif st.session_state.active_module == "clean":
 # =============================================================================
 # MODULE 3: POWER BI EXECUTIVE DASHBOARD
 # =============================================================================
-elif st.session_state.active_module == "eda":
+elif st.session_state.active_tab == "Power BI" or st.session_state.active_module == "eda":
     st.markdown("### 📊 Power BI Executive Analytics Dashboard")
     st.caption("Interactive Slicers Ribbon, KPI Multi-Row Scorecards, Category Donut, Clustered Bar, Treemap, KPI Gauge & Matrix")
 
@@ -1794,7 +1829,7 @@ elif st.session_state.active_module == "eda":
 
 # =============================================================================
 # MODULE 4: AUTOML STUDIO (TRAIN & PREDICT)
-elif st.session_state.active_module == "automl":
+elif st.session_state.active_tab == "AutoML" or st.session_state.active_module == "automl":
     st.markdown("### 🤖 Autonomous Machine Learning & Universal AI Studio")
     st.caption("Complete AI Suite: Tabular AutoML | Instant & Deep Vision | NLP Engine | Recommender | Forecasting | Anomaly Detection | Generative AI")
 
@@ -2844,7 +2879,7 @@ elif st.session_state.active_module == "automl":
 # =============================================================================
 # MODULE 5: CHAT WITH DATA (VOICE MIC INPUT + TAMIL + GROQ)
 # =============================================================================
-elif st.session_state.active_module == "chat":
+elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module == "chat":
     st.markdown("### 💬 Ask Your Data — Multilingual Voice & AI Chatbot")
     st.caption("Voice Microphone Speech-to-Text via Groq Whisper. Type or speak any dataset inquiry.")
 
@@ -3020,7 +3055,7 @@ elif st.session_state.active_module == "chat":
 # =============================================================================
 # MODULE 6: AUTOMATED EXECUTIVE REPORT GENERATOR (ALL RESPONSES DOWNLOAD)
 # =============================================================================
-elif st.session_state.active_module == "report":
+elif st.session_state.active_tab == "Reports" or st.session_state.active_module == "report":
     st.markdown("### 📑 Automated Executive Analytical Report Generator")
     st.caption("Download comprehensive session reports containing all dataset KPIs, auto-cleaning audit logs, AutoML model metrics, and ALL Chatbot Q&A responses.")
 
