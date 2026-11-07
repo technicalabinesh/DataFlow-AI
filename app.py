@@ -14,6 +14,9 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+# Configure multi-core environment variables to prevent Windows subprocess timeouts
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 4))
+
 import re
 import zipfile
 from typing import Tuple, Dict, Any, List, Optional, Union

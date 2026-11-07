@@ -5,6 +5,7 @@ Unit Test Suite: Universal Ingestion, Folder Detection & Auto-Split
 """
 
 import os
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 4))
 import pytest
 import pandas as pd
 import numpy as np

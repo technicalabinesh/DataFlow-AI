@@ -19,6 +19,9 @@ Features:
 """
 
 import os
+# Configure CPU core count environment variable to prevent Windows WMIC process timeout
+os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count() or 4)
+
 import joblib
 from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional
@@ -33,10 +36,12 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.ensemble import (
     RandomForestClassifier,
     GradientBoostingClassifier,
+    HistGradientBoostingClassifier,
     ExtraTreesClassifier,
     VotingClassifier,
     RandomForestRegressor,
     GradientBoostingRegressor,
+    HistGradientBoostingRegressor,
     ExtraTreesRegressor,
     VotingRegressor,
 )
@@ -142,12 +147,16 @@ def train_tabular_models(
 
     preprocessor, num_cols, cat_cols = build_preprocessor(X_train)
 
-    # Initialize model suites with high-accuracy tuned architectures & ensembles
+    # ⚡ HIGH-SPEED ACCELERATION: Fit & transform preprocessor once instead of 20 redundant times!
+    X_train_trans = preprocessor.fit_transform(X_train, y_train)
+    X_test_trans = preprocessor.transform(X_test)
+
+    # Initialize model suites with high-accuracy tuned architectures & fast ensembles
     if task_type == "classification":
-        m_lr = LogisticRegression(max_iter=1000, C=1.0, class_weight="balanced", random_state=42)
-        m_rf = RandomForestClassifier(n_estimators=150, max_depth=8, min_samples_split=4, class_weight="balanced", random_state=42)
-        m_gb = GradientBoostingClassifier(n_estimators=120, learning_rate=0.08, max_depth=4, subsample=0.85, random_state=42)
-        m_et = ExtraTreesClassifier(n_estimators=150, max_depth=8, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_lr = LogisticRegression(max_iter=300, C=1.0, class_weight="balanced", random_state=42)
+        m_rf = RandomForestClassifier(n_estimators=80, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
+        m_gb = HistGradientBoostingClassifier(max_iter=80, learning_rate=0.08, max_depth=6, random_state=42)
+        m_et = ExtraTreesClassifier(n_estimators=80, max_depth=10, min_samples_split=4, class_weight="balanced", random_state=42)
         m_vote = VotingClassifier(
             estimators=[("lr", m_lr), ("et", m_et), ("rf", m_rf)],
             voting="soft",
@@ -162,9 +171,9 @@ def train_tabular_models(
         metric_key = "Accuracy"
     else:
         m_ridge = Ridge(alpha=1.0, random_state=42)
-        m_rf = RandomForestRegressor(n_estimators=150, max_depth=8, min_samples_split=4, random_state=42)
-        m_gb = GradientBoostingRegressor(n_estimators=120, learning_rate=0.08, max_depth=4, subsample=0.85, random_state=42)
-        m_et = ExtraTreesRegressor(n_estimators=150, max_depth=8, min_samples_split=4, random_state=42)
+        m_rf = RandomForestRegressor(n_estimators=80, max_depth=10, min_samples_split=4, random_state=42)
+        m_gb = HistGradientBoostingRegressor(max_iter=80, learning_rate=0.08, max_depth=6, random_state=42)
+        m_et = ExtraTreesRegressor(n_estimators=80, max_depth=10, min_samples_split=4, random_state=42)
         m_vote = VotingRegressor(
             estimators=[("ridge", m_ridge), ("et", m_et), ("gbr", m_gb)],
         )
@@ -182,27 +191,28 @@ def train_tabular_models(
     best_model_name = None
     best_score = -float("inf")
 
-    # Fit and evaluate each pipeline
+    # Fit and evaluate each pipeline with maximum performance
     for name, model_instance in models_dict.items():
-        pipeline = Pipeline(steps=[
-            ("preprocessor", preprocessor),
-            ("model", model_instance),
-        ])
-
-        # Cross-validation on train set (3-fold)
+        # Fast cross-validation directly on pre-transformed features (no redundant preprocessor refitting)
         scoring = "accuracy" if task_type == "classification" else "r2"
         try:
-            cv_scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring=scoring)
+            cv_scores = cross_val_score(model_instance, X_train_trans, y_train, cv=3, scoring=scoring)
             cv_mean = float(np.mean(cv_scores))
         except Exception:
             cv_mean = 0.0
 
-        # Fit on full train set
-        pipeline.fit(X_train, y_train)
+        # Fit model on pre-transformed training set
+        model_instance.fit(X_train_trans, y_train)
+
+        # Assemble unified scikit-learn Pipeline so inference & XAI remain 100% compatible
+        pipeline = Pipeline(steps=[
+            ("preprocessor", preprocessor),
+            ("model", model_instance),
+        ])
         trained_pipelines[name] = pipeline
 
-        # Predict on test set
-        preds = pipeline.predict(X_test)
+        # Fast prediction on pre-transformed test set
+        preds = model_instance.predict(X_test_trans)
 
         if task_type == "classification":
             acc = float(accuracy_score(y_test, preds))

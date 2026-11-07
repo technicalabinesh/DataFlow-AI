@@ -320,8 +320,8 @@ def train_text_classifier(
         raise ValueError("Target label column must have at least 2 distinct classes.")
 
     pipeline = Pipeline([
-        ("tfidf", TfidfVectorizer(max_features=5000, stop_words="english", ngram_range=(1, 2))),
-        ("clf", LogisticRegression(max_iter=1000, C=1.0)),
+        ("tfidf", TfidfVectorizer(max_features=3500, stop_words="english", ngram_range=(1, 2), sublinear_tf=True)),
+        ("clf", LogisticRegression(max_iter=300, C=1.0, random_state=42)),
     ])
 
     X = clean_df[text_col].astype(str)

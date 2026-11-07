@@ -43,11 +43,12 @@ def detect_anomalies(
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Train Isolation Forest
+    # Train Isolation Forest with optimal sub-sampling (O(N) linear time complexity)
     iso_forest = IsolationForest(
         contamination=contamination,
         random_state=random_state,
-        n_estimators=100,
+        n_estimators=75,
+        max_samples=min(256, len(X_scaled)),
         n_jobs=-1,
     )
     preds = iso_forest.fit_predict(X_scaled)  # -1 = anomaly, 1 = normal

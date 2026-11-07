@@ -220,6 +220,39 @@ def train_mobilenet_v2(
     patience_counter = 0
     best_weights = None
 
+    # ⚡ HIGH-SPEED EMBEDDING ACCELERATION:
+    # Since MobileNetV2 backbone weights are frozen, pre-extract validation embeddings once!
+    val_feat_list = []
+    val_label_list = []
+    with torch.no_grad():
+        for imgs, labels, _ in val_loader:
+            imgs = imgs.to(device)
+            vf = model.features(imgs)
+            vf = nn.functional.adaptive_avg_pool2d(vf, (1, 1))
+            vf = torch.flatten(vf, 1)
+            val_feat_list.append(vf)
+            val_label_list.append(labels.to(device))
+    cached_val_feats = torch.cat(val_feat_list, dim=0) if val_feat_list else None
+    cached_val_labels = torch.cat(val_label_list, dim=0) if val_label_list else None
+
+    # Ultra-fast mode: Also pre-extract train features for instant epoch execution
+    cached_train_feats = None
+    cached_train_labels = None
+    if quick_test_mode:
+        tr_feat_list = []
+        tr_label_list = []
+        with torch.no_grad():
+            for imgs, labels, _ in train_loader:
+                imgs = imgs.to(device)
+                tf = model.features(imgs)
+                tf = nn.functional.adaptive_avg_pool2d(tf, (1, 1))
+                tf = torch.flatten(tf, 1)
+                tr_feat_list.append(tf)
+                tr_label_list.append(labels.to(device))
+        if tr_feat_list:
+            cached_train_feats = torch.cat(tr_feat_list, dim=0)
+            cached_train_labels = torch.cat(tr_label_list, dim=0)
+
     # Training Loop
     for epoch in range(1, epochs + 1):
         model.train()
@@ -227,37 +260,62 @@ def train_mobilenet_v2(
         correct_train = 0
         total_train = 0
 
-        for imgs, labels, _ in train_loader:
-            imgs, labels = imgs.to(device), labels.to(device)
+        if quick_test_mode and cached_train_feats is not None:
             optimizer.zero_grad()
-            outputs = model(imgs)
-            loss = criterion(outputs, labels)
+            outputs = model.classifier(cached_train_feats)
+            loss = criterion(outputs, cached_train_labels)
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item() * imgs.size(0)
+            running_loss = loss.item() * cached_train_labels.size(0)
             preds = torch.argmax(outputs, dim=1)
-            correct_train += (preds == labels).sum().item()
-            total_train += labels.size(0)
+            correct_train = (preds == cached_train_labels).sum().item()
+            total_train = cached_train_labels.size(0)
+        else:
+            for imgs, labels, _ in train_loader:
+                imgs, labels = imgs.to(device), labels.to(device)
+                optimizer.zero_grad()
+                with torch.no_grad():
+                    feats = model.features(imgs)
+                    feats = nn.functional.adaptive_avg_pool2d(feats, (1, 1))
+                    feats = torch.flatten(feats, 1)
+                outputs = model.classifier(feats)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item() * imgs.size(0)
+                preds = torch.argmax(outputs, dim=1)
+                correct_train += (preds == labels).sum().item()
+                total_train += labels.size(0)
 
         epoch_train_loss = running_loss / max(total_train, 1)
         epoch_train_acc = (correct_train / max(total_train, 1)) * 100.0
 
-        # Validation Loop
+        # Fast Validation Loop
         model.eval()
         val_loss = 0.0
         correct_val = 0
         total_val = 0
 
-        with torch.no_grad():
-            for imgs, labels, _ in val_loader:
-                imgs, labels = imgs.to(device), labels.to(device)
-                outputs = model(imgs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item() * imgs.size(0)
-                preds = torch.argmax(outputs, dim=1)
-                correct_val += (preds == labels).sum().item()
-                total_val += labels.size(0)
+        if cached_val_feats is not None and len(cached_val_feats) > 0:
+            with torch.no_grad():
+                val_outputs = model.classifier(cached_val_feats)
+                loss_v = criterion(val_outputs, cached_val_labels)
+                val_loss = loss_v.item() * cached_val_labels.size(0)
+                preds = torch.argmax(val_outputs, dim=1)
+                correct_val = (preds == cached_val_labels).sum().item()
+                total_val = cached_val_labels.size(0)
+        else:
+            with torch.no_grad():
+                for imgs, labels, _ in val_loader:
+                    imgs, labels = imgs.to(device), labels.to(device)
+                    outputs = model(imgs)
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item() * imgs.size(0)
+                    preds = torch.argmax(outputs, dim=1)
+                    correct_val += (preds == labels).sum().item()
+                    total_val += labels.size(0)
 
         epoch_val_loss = val_loss / max(total_val, 1)
         epoch_val_acc = (correct_val / max(total_val, 1)) * 100.0
