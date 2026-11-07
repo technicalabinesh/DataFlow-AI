@@ -55,7 +55,7 @@ def generate_powerbi_donut(df: pd.DataFrame, cat_col: str, top_n: int = 6) -> Tu
 
     top_label = vc.iloc[0][cat_col]
     top_pct = (vc.iloc[0]["Count"] / len(df[cat_col].dropna()) * 100) if len(df[cat_col].dropna()) > 0 else 0
-    insight = f"💡 **Power BI Insight**: **'{top_label}'** is the dominant category, representing **{top_pct:.1f}%** of all records."
+    insight = f"💡 **Executive Insight**: **'{top_label}'** is the dominant category, representing **{top_pct:.1f}%** of all records."
     return fig, insight
 
 
@@ -103,7 +103,7 @@ def generate_powerbi_clustered_bar(
 
     max_c = grouped.iloc[0][cat_col]
     max_v = grouped.iloc[0][y_val]
-    insight = f"💡 **Power BI Insight**: Highest ranking segment is **'{max_c}'** with **{max_v}** ({y_title.lower()})."
+    insight = f"💡 **Executive Insight**: Highest ranking segment is **'{max_c}'** with **{max_v}** ({y_title.lower()})."
     return fig, insight
 
 

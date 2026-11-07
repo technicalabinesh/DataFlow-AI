@@ -1,7 +1,7 @@
 """
 =============================================================================
-PROJECT: AI-Powered Universal Data Analyst (Power BI & Neobrutalism Edition)
-Universal Ingestion | Auto-Cleaning | Power BI Dashboard | AutoML | Groq Voice Chatbot
+PROJECT: AI-Powered Universal Data Analyst (Universal Analytics Edition)
+Universal Ingestion | Auto-Cleaning | Visual Analytics | AutoML | Groq Voice Chatbot
 =============================================================================
 Main Application Entry Point (app.py)
 """
@@ -291,7 +291,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# HIGH-CONTRAST NEOBRUTALISM & POWER BI HYBRID DESIGN SYSTEM
+# HIGH-CONTRAST NEOBRUTALISM & EXECUTIVE DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 NEOBRUTALISM_CSS = """
 <style>
@@ -478,7 +478,7 @@ NEOBRUTALISM_CSS = """
         color: #000000 !important;
     }
 
-    /* Power BI Style KPI Scorecard */
+    /* Executive Style KPI Scorecard */
     .pbi-scorecard {
         background: #ffffff;
         border: 2px solid #000000;
@@ -673,12 +673,20 @@ init_session()
 TAB_MODULE_MAP = {
     "Ingest": "ingest",
     "Clean": "clean",
+    "Analytics": "eda",
     "Power BI": "eda",
     "AutoML": "automl",
     "Voice AI": "chat",
     "Reports": "report",
 }
-MODULE_TAB_MAP = {v: k for k, v in TAB_MODULE_MAP.items()}
+MODULE_TAB_MAP = {
+    "ingest": "Ingest",
+    "clean": "Clean",
+    "eda": "Analytics",
+    "automl": "AutoML",
+    "chat": "Voice AI",
+    "report": "Reports",
+}
 
 def set_active_screen(tab_name: str, module_name: Optional[str] = None):
     st.session_state.active_tab = tab_name
@@ -749,9 +757,10 @@ with col_nav2:
         st.rerun()
 
 with col_nav3:
-    btn_label = "📊 Power BI" if st.session_state.active_tab != "Power BI" else "👉 Power BI"
+    is_eda_active = st.session_state.active_tab in ("Analytics", "Power BI")
+    btn_label = "📊 Analytics" if not is_eda_active else "👉 Analytics"
     if st.button(btn_label, width="stretch"):
-        set_active_screen("Power BI", "eda")
+        set_active_screen("Analytics", "eda")
         st.rerun()
 
 with col_nav4:
@@ -802,12 +811,12 @@ def render_hero_blueprint_and_milestones():
                 Seamless <span style="text-decoration: underline; text-decoration-color: #8b5cf6;">Data</span> Journey ⤳
             </div>
             <div style="font-size: 1.22rem; color: #1e293b; font-weight: 800; line-height: 1.5; margin-bottom: 8px; max-width: 660px;">
-                Universal AI Data Analyst: Autonomous Cleaning, Power BI Dashboard, AutoML Leaderboards, 
+                Universal AI Data Analyst: Autonomous Cleaning, Visual Analytics Dashboard, AutoML Leaderboards, 
                 and Multilingual Voice & Text Chatbot in English & Tamil.
             </div>
             <div style="font-size: 0.92rem; color: #334155; font-weight: 600; line-height: 1.55; margin-bottom: 20px; max-width: 660px; background: #f8fafc; border-left: 4px solid #8b5cf6; padding: 10px 14px; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 0px rgba(0,0,0,0.06);">
                 ✦ <b>Enterprise Multi-Modal Intelligence Engine:</b> Featuring Zero-Leakage Train/Val/Test Splitting, 
-                Automated Type Imputation & Outlier Mitigation, Dynamic Power BI Visual Slicers, High-Accuracy Ensembles (Soft Voting & Extra Trees), 
+                Automated Type Imputation & Outlier Mitigation, Dynamic Visual Slicers, High-Accuracy Ensembles (Soft Voting & Extra Trees), 
                 Deep Computer Vision (MobileNetV2 Transfer Learning & Real-Time Inference), Sentiment NLP, 
                 Harmonic Time-Series Forecasting, and Multilingual Conversational Voice Copilot with Whisper STT & LLaMA 3.3.
             </div>
@@ -856,7 +865,7 @@ def render_hero_blueprint_and_milestones():
                     ✦ Universal AI Data Analyst — System Blueprint
                 </div>
                 <div style="font-size: 0.82rem; color: #475569; font-weight: 600; line-height: 1.45; margin-bottom: 14px;">
-                    Fully automated analytics engine: from multi-format raw data ingestion to Power BI executive dashboards, dual AutoML, and multilingual conversational AI.
+                    Fully automated analytics engine: from multi-format raw data ingestion to executive visual analytics dashboards, dual AutoML, and multilingual conversational AI.
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px;">
@@ -880,7 +889,7 @@ def render_hero_blueprint_and_milestones():
 
                     <div style="background: #f8fafc; border: 1.5px solid #000000; border-radius: 12px; padding: 10px 12px;">
                         <div style="font-weight: 900; font-size: 0.82rem; color: #000000; margin-bottom: 3px;">
-                            📊 3. Power BI Dashboard
+                            📊 3. Visual Analytics Studio
                         </div>
                         <div style="font-size: 0.74rem; color: #334155; line-height: 1.35; font-weight: 600;">
                             Interactive Slicers, 5 KPI Scorecards, Donut decomposition, Treemap & dynamic Matrix table.
@@ -974,15 +983,15 @@ def render_hero_blueprint_and_milestones():
             <div class="milestone-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <span class="neo-badge badge-cyan" style="font-size: 0.62rem; padding: 2px 8px;">Step 3</span>
-                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">POWER BI</span>
+                    <span class="neo-badge badge-dark" style="font-size: 0.62rem; padding: 2px 8px;">ANALYTICS</span>
                 </div>
-                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Power BI</div>
-                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Slicers, Donut, Matrix</div>
+                <div style="font-weight: 900; font-size: 0.88rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📊 Visual Analytics</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Slicers, Trends & Matrix</div>
             </div>
             """
         )
-        if st.button("Open Power BI ↗", key="m_btn_3", width="stretch"):
-            set_active_screen("Power BI", "eda")
+        if st.button("Open Analytics ↗", key="m_btn_3", width="stretch"):
+            set_active_screen("Analytics", "eda")
             st.rerun()
 
     with m_c4:
@@ -1042,7 +1051,7 @@ def render_hero_blueprint_and_milestones():
 
 
 # =============================================================================
-# PAGE ROUTING (Ingest, Clean, Power BI, AutoML, Voice AI, Reports)
+# PAGE ROUTING (Ingest, Clean, Analytics, AutoML, Voice AI, Reports)
 # =============================================================================
 if st.session_state.active_tab == "Ingest" or st.session_state.active_module == "ingest":
     render_hero_blueprint_and_milestones()
@@ -1257,8 +1266,8 @@ if st.session_state.active_tab == "Ingest" or st.session_state.active_module == 
                         st.rerun()
 
                 with c_ing2:
-                    if st.button("📊 View Vision Analytics in Power BI ↗", key="btn_confirm_go_pbi", width="stretch"):
-                        set_active_screen("Power BI", "eda")
+                    if st.button("📊 View Vision Analytics in Analytics Studio ↗", key="btn_confirm_go_pbi", width="stretch"):
+                        set_active_screen("Analytics", "eda")
                         st.rerun()
 
             elif scan_res.get("mode") in ["tables_mergeable", "tables_single"]:
@@ -1641,10 +1650,10 @@ elif st.session_state.active_tab == "Clean" or st.session_state.active_module ==
 
 
 # =============================================================================
-# MODULE 3: POWER BI EXECUTIVE DASHBOARD
+# MODULE 3: VISUAL ANALYTICS & EXECUTIVE DASHBOARD
 # =============================================================================
-elif st.session_state.active_tab == "Power BI" or st.session_state.active_module == "eda":
-    st.markdown("### 📊 Power BI Executive Analytics Dashboard")
+elif st.session_state.active_tab in ("Analytics", "Power BI") or st.session_state.active_module == "eda":
+    st.markdown("### 📊 Universal Executive Analytics Dashboard")
     st.caption("Interactive Slicers Ribbon, KPI Multi-Row Scorecards, Category Donut, Clustered Bar, Treemap, KPI Gauge & Matrix")
 
     if st.session_state.dataset_type == "image":
@@ -1687,8 +1696,8 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
         ])
 
         with eda_subtab1:
-            # 1. POWER BI INTERACTIVE SLICERS RIBBON
-            with st.expander("🔍 Power BI Slicers & Dynamic Cross-Filtering Ribbon", expanded=True):
+            # 1. INTERACTIVE SLICERS RIBBON
+            with st.expander("🔍 Interactive Slicers & Dynamic Cross-Filtering Ribbon", expanded=True):
                 s_c1, s_c2, s_c3, s_c4 = st.columns([1.5, 1.5, 1.8, 1.2])
                 filtered_df = active_df.copy()
 
@@ -1753,15 +1762,15 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
                 st.markdown(
                     f"""
                     <div style="background: #0078D4; color: #ffffff; padding: 6px 14px; border-radius: 8px; font-weight: 800; font-size: 0.82rem; margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;">
-                        <span>⚡ Power BI Cross-Filtering Active:</span>
+                        <span>⚡ Dynamic Cross-Filtering Active:</span>
                         <span>Showing <b>{len(filtered_df):,}</b> of <b>{len(active_df):,}</b> records (<b>{filter_pct:.1f}%</b> of total)</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-            # 2. POWER BI KPI SCORECARD ROW (5-CARD MULTI-ROW)
-            st.markdown("##### 📌 Power BI Executive KPI Cards")
+            # 2. EXECUTIVE KPI SCORECARD ROW (5-CARD MULTI-ROW)
+            st.markdown("##### 📌 Executive KPI Cards")
             k_c1, k_c2, k_c3, k_c4, k_c5 = st.columns(5)
 
             with k_c1:
@@ -1850,9 +1859,9 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
                     unsafe_allow_html=True,
                 )
 
-            # 3. POWER BI VISUAL DECOMPOSITION GRID
+            # 3. VISUAL DECOMPOSITION GRID
             st.markdown("---")
-            st.markdown("##### 📈 Power BI Visual Decomposition Grid")
+            st.markdown("##### 📈 Visual Analytics Decomposition Grid")
 
             v_row1_col1, v_row1_col2 = st.columns(2)
             with v_row1_col1:
@@ -1895,11 +1904,11 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
                     st.plotly_chart(fig_dist, width="stretch")
                     st.info(ins_dist)
 
-            # 4. POWER BI TREEMAP & GAUGE ROW
+            # 4. TREEMAP & GAUGE ROW
             v_row3_col1, v_row3_col2 = st.columns(2)
             with v_row3_col1:
                 if cat_cols:
-                    st.markdown("##### 🗺️ Power BI Treemap Hierarchy")
+                    st.markdown("##### 🗺️ Treemap Hierarchy")
                     tm_col = cat_cols[0]
                     tm_val = num_cols[0] if num_cols else None
                     fig_tm, ins_tm = generate_powerbi_treemap(filtered_df, tm_col, tm_val)
@@ -1907,7 +1916,7 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
                     st.info(ins_tm)
             with v_row3_col2:
                 if num_cols:
-                    st.markdown("##### ⏱️ Power BI Target Gauge")
+                    st.markdown("##### ⏱️ Target Performance Gauge")
                     target_col_gauge = num_cols[0]
                     cur_mean = float(filtered_df[target_col_gauge].mean()) if not filtered_df.empty else 0
                     max_metric = float(active_df[target_col_gauge].max()) if not active_df.empty else 100
@@ -1915,19 +1924,19 @@ elif st.session_state.active_tab == "Power BI" or st.session_state.active_module
                     st.plotly_chart(fig_gauge, width="stretch")
                     st.caption(f"Gauge tracking average {target_col_gauge} across active filters.")
 
-            # 5. POWER BI MATRIX / PIVOT SUMMARY TABLE
+            # 5. MATRIX / PIVOT SUMMARY TABLE
             if cat_cols and num_cols:
                 st.markdown("---")
-                st.markdown("##### 📋 Power BI Executive Matrix Visual")
+                st.markdown("##### 📋 Executive Matrix Visual")
                 st.caption("Drill-down aggregation table: Count, Sum, Mean, Min, Max, and Segment Share %")
                 m_cat = st.selectbox("Matrix Row Dimension (Category):", cat_cols, key="matrix_cat_sel")
                 m_num = st.selectbox("Matrix Value Dimension (Metric):", num_cols, key="matrix_num_sel")
                 matrix_df = generate_powerbi_matrix(filtered_df, m_cat, m_num)
                 st.dataframe(matrix_df, width="stretch")
 
-            # 6. POWER BI CUSTOM VISUAL STUDIO
+            # 6. CUSTOM VISUAL STUDIO
             st.markdown("---")
-            st.markdown("##### 🛠️ Power BI Custom Visual Studio")
+            st.markdown("##### 🛠️ Interactive Visual Studio")
             pbi_b1, pbi_b2, pbi_b3, pbi_b4 = st.columns(4)
             with pbi_b1:
                 pbi_vtype = st.selectbox("Visual Type:", ["Donut", "Clustered Bar", "Treemap", "Line", "Scatter", "Box", "Histogram"], key="pbi_studio_type")
@@ -2298,7 +2307,7 @@ elif st.session_state.active_tab == "AutoML" or st.session_state.active_module =
 
             if st.button("🚀 Train 3+ ML Pipelines (1-Click)", key="btn_train_tabular_pipes", width="stretch"):
                 with st.spinner("Executing scikit-learn pipelines with cross-validation..."):
-                    res = train_tabular_models(train_df, test_df, target_col=target_col)
+                    res = train_tabular_models(train_df, test_df, target_col=target_col, task_type=task_type)
                     st.session_state.ml_results = res
                 st.success("✅ Machine Learning training completed!")
 

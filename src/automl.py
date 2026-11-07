@@ -61,6 +61,7 @@ MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mode
 
 __all__ = [
     "infer_task_type",
+    "clean_target_series",
     "build_preprocessor",
     "train_tabular_models",
     "predict_tabular_sample",
@@ -69,21 +70,60 @@ __all__ = [
 ]
 
 
+def clean_target_series(s: pd.Series, task_type: str) -> pd.Series:
+    """
+    Sanitizes the target feature series for machine learning pipelines.
+    - If regression: strips currency symbols ($ € £ ¥ ₹), commas, spaces, percentages,
+      and coerces to numeric float64.
+    - If classification: preserves class labels as consistent series.
+    """
+    if task_type == "regression":
+        if not pd.api.types.is_numeric_dtype(s):
+            cleaned = (
+                s.astype(str)
+                .str.replace(r"[$,€£¥₹%\s]", "", regex=True)
+                .str.replace(",", "", regex=False)
+            )
+            return pd.to_numeric(cleaned, errors="coerce")
+        return pd.to_numeric(s, errors="coerce")
+    return s
+
+
 def infer_task_type(series: pd.Series) -> str:
     """
     Infers whether the machine learning task is 'classification' or 'regression'.
-    - Categorical/object/boolean/string -> classification
+    - Categorical/object/boolean/string -> classification (unless formatted numeric like currency)
     - Numeric with <= 10 unique values -> classification
     - Numeric with > 10 unique values -> regression
     """
     clean_series = series.dropna()
-    if clean_series.dtype == "object" or clean_series.dtype.name == "category" or clean_series.dtype == "bool":
+    if len(clean_series) == 0:
         return "classification"
-    
-    unique_vals = clean_series.nunique()
-    if unique_vals <= 10:
+
+    # If already numeric
+    if pd.api.types.is_numeric_dtype(clean_series):
+        if clean_series.nunique() <= 10:
+            return "classification"
+        return "regression"
+
+    # If boolean or category
+    if clean_series.dtype == "bool" or clean_series.dtype.name == "category":
         return "classification"
-    return "regression"
+
+    # If string/object: check if it represents currency or formatted numbers (e.g. $129.99, 1,200, 45%)
+    cleaned_num = (
+        clean_series.astype(str)
+        .str.replace(r"[$,€£¥₹%\s]", "", regex=True)
+        .str.replace(",", "", regex=False)
+    )
+    converted = pd.to_numeric(cleaned_num, errors="coerce")
+    valid_ratio = converted.notnull().sum() / len(clean_series)
+    if valid_ratio > 0.8:
+        if converted.dropna().nunique() <= 10:
+            return "classification"
+        return "regression"
+
+    return "classification"
 
 
 def build_preprocessor(X: pd.DataFrame) -> Tuple[ColumnTransformer, List[str], List[str]]:
@@ -128,17 +168,30 @@ def train_tabular_models(
     if task_type is None:
         task_type = infer_task_type(train_df[target_col])
 
-    # Separate features and target
-    X_train = train_df.drop(columns=[target_col])
-    y_train = train_df[target_col]
-    X_test = test_df.drop(columns=[target_col])
-    y_test = test_df[target_col]
+    # Separate features and target with automated target sanitization
+    if task_type == "regression":
+        y_train_series = clean_target_series(train_df[target_col], "regression")
+        y_test_series = clean_target_series(test_df[target_col], "regression")
 
-    # Handle missing values in target by dropping rows
-    valid_train_idx = y_train.dropna().index
-    X_train, y_train = X_train.loc[valid_train_idx], y_train.loc[valid_train_idx]
-    valid_test_idx = y_test.dropna().index
-    X_test, y_test = X_test.loc[valid_test_idx], y_test.loc[valid_test_idx]
+        # Handle missing or invalid values in regression target by dropping rows
+        valid_train_idx = y_train_series.dropna().index
+        valid_test_idx = y_test_series.dropna().index
+
+        X_train = train_df.loc[valid_train_idx].drop(columns=[target_col])
+        y_train = y_train_series.loc[valid_train_idx].astype(np.float64)
+        X_test = test_df.loc[valid_test_idx].drop(columns=[target_col])
+        y_test = y_test_series.loc[valid_test_idx].astype(np.float64)
+    else:
+        X_train = train_df.drop(columns=[target_col])
+        y_train = train_df[target_col]
+        X_test = test_df.drop(columns=[target_col])
+        y_test = test_df[target_col]
+
+        # Handle missing values in target by dropping rows
+        valid_train_idx = y_train.dropna().index
+        X_train, y_train = X_train.loc[valid_train_idx], y_train.loc[valid_train_idx]
+        valid_test_idx = y_test.dropna().index
+        X_test, y_test = X_test.loc[valid_test_idx], y_test.loc[valid_test_idx]
 
     # Drop obvious high-cardinality ID columns (e.g. Name, ID, OrderID)
     id_cols = [c for c in X_train.columns if "id" in c.lower() or "name" in c.lower() or X_train[c].nunique() == len(X_train)]

@@ -378,7 +378,7 @@ def generate_powerpoint_presentation(
     insights = eda_insights if eda_insights else [
         "Data Quality verified with isolated Train/Val/Test splits to prevent optimistic evaluation bias.",
         "Predictive models show high classification/regression stability across cross-validation folds.",
-        "Interactive Power BI visual slicers enabled for drill-down decision making.",
+        "Interactive visual slicers and dynamic cross-filtering enabled for drill-down decision making.",
         "Recommended Action: Deploy winning pipeline directly for production inference or batch scoring."
     ]
     for insight in insights[:5]:
