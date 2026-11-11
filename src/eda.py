@@ -213,13 +213,17 @@ def generate_correlation_heatmap(df: pd.DataFrame) -> Tuple[Optional[go.Figure],
         margin=dict(l=40, r=40, t=50, b=40),
     )
 
-    np.fill_diagonal(corr.values, 0)
-    max_val = corr.abs().max().max()
+    # Safe off-diagonal extraction without mutating read-only array buffers
+    corr_no_diag = corr.copy()
+    for col_name in corr_no_diag.columns:
+        corr_no_diag.loc[col_name, col_name] = 0.0
+
+    max_val = corr_no_diag.abs().max().max() if not corr_no_diag.empty else 0
     max_pair = None
-    for c1 in corr.columns:
-        for c2 in corr.columns:
-            if c1 != c2 and abs(corr.loc[c1, c2]) == max_val:
-                max_pair = (c1, c2, corr.loc[c1, c2])
+    for c1 in corr_no_diag.columns:
+        for c2 in corr_no_diag.columns:
+            if c1 != c2 and abs(corr_no_diag.loc[c1, c2]) == max_val:
+                max_pair = (c1, c2, corr_no_diag.loc[c1, c2])
                 break
         if max_pair:
             break

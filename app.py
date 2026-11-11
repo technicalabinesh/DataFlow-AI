@@ -3337,12 +3337,31 @@ elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module
         # Chat History
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+                st.markdown(msg.get("content", ""))
+
+                # Display stored result (table, chart, markdown, or scalar)
+                m_res = msg.get("result")
+                m_type = msg.get("result_type")
+                if m_res is None and "result_df" in msg:
+                    m_res = msg["result_df"]
+                    m_type = "dataframe" if m_res is not None else None
+
+                if m_res is not None:
+                    if m_type == "dataframe" or isinstance(m_res, (pd.DataFrame, pd.Series)):
+                        st.dataframe(m_res, width="stretch")
+                    elif m_type == "chart" or hasattr(m_res, "show") or "Figure" in type(m_res).__name__:
+                        st.plotly_chart(m_res, width="stretch")
+                    elif m_type == "scalar" or isinstance(m_res, (str, int, float, bool)):
+                        if isinstance(m_res, str) and ("\n" in m_res or m_res.strip().startswith(("#", "-", "*", "|"))):
+                            st.markdown(m_res)
+                        else:
+                            st.markdown(f"**Computed Value**: `{m_res}`")
+                    elif m_type == "error":
+                        st.error(str(m_res))
+
                 if "code" in msg and msg["code"]:
-                    with st.expander("🛠️ View Generated Python Code"):
+                    with st.expander("🛠️ View Generated Python Code", expanded=False):
                         st.code(msg["code"], language="python")
-                if "result_df" in msg and msg["result_df"] is not None:
-                    st.dataframe(msg["result_df"], width="stretch")
 
         # Chat Input Box
         prompt = st.chat_input("Ask any question in English or தமிழ் (e.g., 'What is the average fare?' or 'எத்தனை பதிவுகள் உள்ளன?'):")
@@ -3415,17 +3434,22 @@ elif st.session_state.active_tab == "Voice AI" or st.session_state.active_module
                     elif exec_res["type"] == "chart":
                         st.plotly_chart(res_obj, width="stretch")
                     elif exec_res["type"] == "scalar":
-                        st.markdown(f"**Computed Value**: `{res_obj}`")
+                        if isinstance(res_obj, str) and ("\n" in res_obj or res_obj.strip().startswith(("#", "-", "*", "|"))):
+                            st.markdown(res_obj)
+                        else:
+                            st.markdown(f"**Computed Value**: `{res_obj}`")
                     elif exec_res["type"] == "error":
                         st.error(exec_res["error"])
 
-                    with st.expander("🛠️ View Generated Python Code"):
+                    with st.expander("🛠️ View Generated Python Code", expanded=False):
                         st.code(gen_code, language="python")
 
                     st.session_state.chat_history.append({
                         "role": "assistant",
                         "content": answer_text,
                         "code": gen_code,
+                        "result": res_obj,
+                        "result_type": exec_res["type"],
                         "result_df": saved_df,
                         "timestamp": datetime.now().strftime("%H:%M:%S"),
                     })
@@ -3464,7 +3488,7 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
             unsafe_allow_html=True,
         )
 
-        rep_c1, rep_c2, rep_c3, rep_c4 = st.columns(4)
+        rep_c1, rep_c2, rep_c3 = st.columns(3)
         with rep_c1:
             st.markdown("#### 📄 Executive PDF Report")
             st.caption("Includes KPIs, full cleaning history, ML benchmarks, and all chatbot Q&A.")
@@ -3484,27 +3508,6 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
             )
 
         with rep_c2:
-            st.markdown("#### 📊 Executive Pitch Deck (.pptx)")
-            st.caption("5-slide executive presentation with KPI cards, audit logs, & ML metrics.")
-            try:
-                pptx_bytes = generate_powerpoint_presentation(
-                    dataset_name=st.session_state.raw_filename or "Dataset",
-                    summary_metrics=summary,
-                    cleaning_log=st.session_state.cleaning_log,
-                    ml_results=st.session_state.ml_results,
-                    chat_history=st.session_state.chat_history,
-                )
-                st.download_button(
-                    "📥 Download Pitch Deck (.pptx)",
-                    data=pptx_bytes,
-                    file_name=f"Executive_Deck_{st.session_state.raw_filename or 'Dataset'}.pptx",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    width="stretch",
-                )
-            except Exception as pptx_err:
-                st.error(f"PowerPoint Engine: {str(pptx_err)}")
-
-        with rep_c3:
             st.markdown("#### 📝 Microsoft Word (.docx)")
             st.caption("Editable Word document containing all tabular metrics and responses.")
             docx_bytes = generate_word_report(
@@ -3522,7 +3525,7 @@ elif st.session_state.active_tab == "Reports" or st.session_state.active_module 
                 width="stretch",
             )
 
-        with rep_c4:
+        with rep_c3:
             st.markdown("#### 📦 Full Session Export (JSON)")
             st.caption("Raw machine-readable export with every single query, result, and metric.")
             json_str = generate_json_session_export(

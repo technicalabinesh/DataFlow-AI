@@ -168,16 +168,10 @@ STRICT CODE GENERATION & AST RULES
 ==================================================
 AMBIGUOUS, TYPO-RIDDLED & VAGUE QUERY HANDLING
 ==================================================
-1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "expalain", "help", "summary", "tell me about this data", "overview", "what is this"):
+1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "expalain", "help", "summary", "tell me about this data", "overview", "what is this", "summarise", "summarize"):
    - NEVER return: result = "This question cannot be answered from the dataset's available columns."
-   - INSTEAD, generate a comprehensive statistical summary formatted cleanly in markdown:
-     result = (
-         f"### 📊 Automated Dataset Summary\\n\\n"
-         f"- **Total Rows:** {{len(df):,}}\\n"
-         f"- **Total Columns:** {{len(df.columns)}}\\n\\n"
-         f"**Columns:** {{', '.join(df.columns.tolist())}}\\n\\n"
-         f"**Statistical Breakdown:**\\n" + df.describe(include='all').T.fillna('-').to_string()
-     )
+   - INSTEAD, return an informative descriptive summary DataFrame:
+     result = df.describe(include='all').T.fillna('-')
 
 2. TYPOS IN INTENT OR COLUMN NAMES (e.g., "daste" -> "dataset", "expalain" -> "explain", "outliers", "infomation"):
    - Infer the user's intent from the closest semantic match.
@@ -274,16 +268,10 @@ STRICT CODE GENERATION & AST RULES
 ==================================================
 AMBIGUOUS, TYPO-RIDDLED & VAGUE QUERY HANDLING
 ==================================================
-1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "help", "summary", "tell me about this data", "overview"):
+1. VAGUE OR GENERAL ENQUIRIES (e.g., "explain", "help", "summary", "tell me about this data", "overview", "what is this", "summarise", "summarize"):
    - NEVER return: result = "This question cannot be answered from the dataset's available columns."
-   - INSTEAD, generate a comprehensive statistical summary formatted cleanly in markdown:
-     result = (
-         f"### 📊 Automated Dataset Summary\n\n"
-         f"- **Total Rows:** {{len(df):,}}\n"
-         f"- **Total Columns:** {{len(df.columns)}}\n\n"
-         f"**Columns:** {{', '.join(df.columns.tolist())}}\n\n"
-         f"**Statistical Breakdown:**\n" + df.describe(include='all').T.fillna('-').to_markdown()
-     )
+   - INSTEAD, return an informative descriptive summary DataFrame:
+     result = df.describe(include='all').T.fillna('-')
 
 2. TYPOS IN INTENT OR COLUMN NAMES (e.g., "daste" -> "dataset", "outliers", "infomation"):
    - Infer the user's intent from the closest semantic match.
